@@ -9,8 +9,9 @@ import { RelationshipPage } from "./pages/relationship.tsx";
 import { TimelinePage } from "./pages/timeline.tsx";
 import { ProactivePage } from "./pages/proactive.tsx";
 import { WeixinPage } from "./pages/weixin.tsx";
+import { QqPage } from "./pages/qq.tsx";
 
-type Tab = "characters" | "chat" | "memories" | "relationship" | "timeline" | "proactive" | "weixin" | "settings";
+type Tab = "characters" | "chat" | "memories" | "relationship" | "timeline" | "proactive" | "weixin" | "qq" | "settings";
 
 export function App() {
   const [tab, setTab] = useState<Tab>("characters");
@@ -102,6 +103,7 @@ export function App() {
               ["timeline", "事件与任务"],
               ["proactive", "主动消息"],
               ["weixin", "微信"],
+              ["qq", "QQ"],
               ["settings", "模型设置"],
             ] as Array<[Tab, string]>
           ).map(([key, label]) => (
@@ -148,6 +150,7 @@ export function App() {
       {tab === "timeline" && <TimelinePage characters={characters} onError={setError} />}
       {tab === "proactive" && <ProactivePage characters={characters} onError={setError} />}
       {tab === "weixin" && <WeixinPage characters={characters} onError={setError} />}
+        {tab === "qq" && <QqPage onError={setError} />}
       {tab === "settings" && <SettingsPage onError={setError} />}
     </div>
   );

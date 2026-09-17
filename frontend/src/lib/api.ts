@@ -10,6 +10,7 @@ import type {
   TaskDto,
   WeixinLoginDto,
   WeixinStatusDto,
+  QqStatusDto,
   ContextPreviewDto,
   ConversationDto,
   MemoryDto,
@@ -264,6 +265,14 @@ export const api = {
   weixinCancelLogin: (sessionId: string) =>
     request<{ cancelled: boolean }>(`/api/channels/weixin/login/${sessionId}/cancel`, { method: "POST" }),
   weixinRemoveAccount: (accountId: string) => request<void>(`/api/channels/weixin/accounts/${accountId}`, { method: "DELETE" }),
+
+  /** QQ 机器人：状态、保存配置、重连、断开、清密钥（密钥只进不出） */
+  qqStatus: () => request<QqStatusDto>("/api/channels/qq/status"),
+  qqSaveConfig: (input: { appId: string; clientSecret?: string; sandbox?: boolean }) =>
+    request<{ ok: boolean }>("/api/channels/qq/config", { method: "PUT", body: JSON.stringify(input) }),
+  qqReconnect: () => request<{ ok: boolean }>("/api/channels/qq/reconnect", { method: "POST" }),
+  qqDisconnect: () => request<{ ok: boolean }>("/api/channels/qq/disconnect", { method: "POST" }),
+  qqClearCredentials: () => request<{ ok: boolean }>("/api/channels/qq/credentials", { method: "DELETE" }),
   weixinRelogin: (accountId: string) =>
     request<{ ok: boolean; reason: string | null }>(`/api/channels/weixin/accounts/${accountId}/relogin`, { method: "POST" }),
 

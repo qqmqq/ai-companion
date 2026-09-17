@@ -303,6 +303,25 @@ export interface SchedulerStatusDto {
   pendingTasks: number;
   failedTasks: number;
 }
+/** QQ 渠道状态（密钥永远不在这里） */
+export interface QqStatusDto {
+  configured: boolean;
+  appId: string | null;
+  sandbox: boolean | null;
+  baseUrl: string | null;
+  credentialsSaved: boolean;
+  session: {
+    state: "not_configured" | "disconnected" | "connecting" | "connected" | "reconnecting" | "credential_invalid" | "stopped";
+    lastError: string | null;
+    lastEventAt: string | null;
+    consecutiveFailures: number;
+    gatewaySessions: number;
+  };
+  token: { state: "none" | "valid" | "expired"; expiresAt: string | null };
+  health: { state: string; accounts: number; message: string | null };
+  accounts: Array<{ id: string; externalAccountId: string; displayName: string; status: string }>;
+}
+
 export interface WeixinAccountDto {
   accountId: string;
   displayName: string;
