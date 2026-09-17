@@ -1,0 +1,8 @@
+node_modules/
+dist/
+data/
+guard-tmp/
+backend/.guard-*/
+*.log
+.env
+.DS_Store

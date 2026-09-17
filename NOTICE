@@ -1,0 +1,23 @@
+# Third-party notices / 第三方声明
+
+## Reference only, no code copied / 仅作研究参考，未复制代码
+
+The channel architecture in this project was designed after studying
+`Tencent/openclaw-weixin` (MIT License, Copyright (C) 2026 Tencent),
+which documents the Weixin Backend API protocol.
+
+- Repository: https://github.com/Tencent/openclaw-weixin
+- License: MIT
+- What we used: publicly documented protocol facts (endpoint paths, field names,
+  numeric type codes, media encryption scheme) and general design lessons.
+- What we did NOT do: no source files were copied or vendored; no OpenClaw runtime
+  dependency is declared; the channel implementation is written independently.
+- If any code is ever copied from that project, this notice must be updated and the
+  MIT copyright notice preserved in the affected files.
+
+## Runtime dependencies
+
+- fastify (MIT)
+- zod (MIT)
+
+Frontend: react, react-dom (MIT); vite (MIT).

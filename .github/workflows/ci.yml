@@ -1,0 +1,45 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  verify:
+    name: typecheck · test · build · guard
+    runs-on: ubuntu-latest
+    env:
+      # 固定时区：测试要么与时区无关，要么用同一个格式化函数算期望值。
+      # 第一次 CI 就是被"把 UTC+8 的渲染结果写死进断言"绊倒的。
+      TZ: UTC
+    steps:
+      - uses: actions/checkout@v4
+
+      # 版本不在这里写：package.json 的 packageManager 已经声明了 pnpm@10.0.0，
+      # 两处都写会直接报 ERR_PNPM_BAD_PM_VERSION（第一次 CI 就是这么挂的）
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - name: Install
+        run: pnpm install --frozen-lockfile
+
+      - name: Typecheck
+        run: pnpm typecheck
+
+      - name: Backend tests (unit · integration · architecture guards)
+        run: pnpm --filter @companion/backend test
+
+      - name: Frontend tests
+        run: pnpm --filter @companion/frontend test
+
+      - name: Architecture guards
+        run: pnpm guard
+
+      - name: Build
+        run: pnpm build
