@@ -48,21 +48,54 @@ export function WeixinPage(props: { characters: CharacterDto[]; onError: (messag
   };
 
   /**
+   * 一个「聊天」= 一个联系人。**同一个联系人可以有多条会话**（每换一个角色就多一条，各自留着历史），
+   * 所以这里必须按渠道 + 会话引用聚合；否则换过角色的人会在界面上出现两行。
+   */
+  interface ChatRow {
+    key: string;
+    /** 这条聊天现在在跟谁聊：优先标了 activeCharacterId 的那条会话，否则取最近活跃的一条 */
+    current: ConversationDto;
+    /** 这个联系人的全部会话（切回去还能接着聊） */
+    conversations: ConversationDto[];
+  }
+
+  function groupChats(list: ConversationDto[]): ChatRow[] {
+    const rows = new Map<string, ChatRow>();
+    for (const conversation of list) {
+      const ref = conversation.conversationRef ?? conversation.id;
+      const key = conversation.channel + ":" + ref;
+      const row = rows.get(key);
+      if (row === undefined) {
+        rows.set(key, { key, current: conversation, conversations: [conversation] });
+        continue;
+      }
+      row.conversations.push(conversation);
+      const rowIsActive = row.current.activeCharacterId !== null && row.current.activeCharacterId !== undefined;
+      const candidateIsActive = conversation.activeCharacterId !== null && conversation.activeCharacterId !== undefined;
+      const newer = (conversation.lastMessageAt ?? "") > (row.current.lastMessageAt ?? "");
+      // 标了「现在在聊」的那条优先；都没标就取最近活跃的一条
+      if ((candidateIsActive && !rowIsActive) || (candidateIsActive === rowIsActive && newer)) row.current = conversation;
+    }
+    return [...rows.values()].sort((a, b) => (b.current.lastMessageAt ?? "").localeCompare(a.current.lastMessageAt ?? ""));
+  }
+
+  /**
    * 后台换角色：与微信里发「切换角色 X」走的是同一条核心逻辑。
    * 换到没聊过的角色会开新会话，并把那句开场白发到微信。
    */
-  async function switchCharacter(chat: ConversationDto) {
-    const characterId = pick[chat.id] ?? "";
+  async function switchCharacter(row: ChatRow) {
+    const characterId = pick[row.key] ?? "";
     if (characterId.length === 0) return;
-    setSwitching(chat.id);
+    setSwitching(row.key);
     try {
-      const result = await api.switchConversationCharacter(chat.id, characterId);
+      // 用"现在在聊"的那条会话做入口：后端会按这个聊天的渠道 + 会话引用去换人
+      const result = await api.switchConversationCharacter(row.current.id, characterId);
       const note = result.newConversation
         ? result.delivered
           ? "已切换到「" + result.characterName + "」，开场白已发到微信：「" + result.text + "」"
           : "已切换到「" + result.characterName + "」，但开场白没发出去（" + (result.deliveryError ?? "未知原因") + "）—— 你可以在微信里先发一条消息试试。"
         : result.text;
-      setNotes((previous) => ({ ...previous, [chat.id]: note }));
+      setNotes((previous) => ({ ...previous, [row.key]: note }));
       await refresh();
     } catch (error) {
       props.onError((error as Error).message);
@@ -139,6 +172,8 @@ export function WeixinPage(props: { characters: CharacterDto[]; onError: (messag
       setBusy(false);
     }
   }
+
+  const chatRows = groupChats(chats);
 
   return (
     <section className="panel">
@@ -222,12 +257,14 @@ export function WeixinPage(props: { characters: CharacterDto[]; onError: (messag
         换到没聊过的角色会开一个新会话，并把那个角色的开场白发到微信；换回以前聊过的角色则接着原来的会话。
       </p>
       <ul className="cards">
-        {chats.map((chat) => {
+        {chatRows.map((row) => {
+          const chat = row.current;
           const activeId = chat.activeCharacterId ?? null;
           const current = props.characters.find((character) => character.id === (activeId ?? chat.characterId)) ?? null;
-          const note = notes[chat.id];
+          const note = notes[row.key];
+          const others = row.conversations.filter((conversation) => conversation.id !== chat.id);
           return (
-            <li key={chat.id}>
+            <li key={row.key}>
               <div className="row space-between">
                 <strong>{current?.name ?? "未知角色"}</strong>
                 <span className={activeId === null ? "score" : "ok-text"}>
@@ -238,10 +275,19 @@ export function WeixinPage(props: { characters: CharacterDto[]; onError: (messag
                 <span>最近消息：{chat.lastMessageText === null || chat.lastMessageText.length === 0 ? "—" : chat.lastMessageText.slice(0, 30)}</span>
                 <span>最后活跃：{chat.lastMessageAt === null ? "—" : chat.lastMessageAt.slice(0, 16).replace("T", " ")}</span>
               </div>
+              {others.length > 0 && (
+                <p className="hint">
+                  这个联系人还有 {others.length} 个会话（每个角色一条，历史各自留着）：
+                  {others
+                    .map((conversation) => props.characters.find((character) => character.id === conversation.characterId)?.name ?? "已删除的角色")
+                    .join("、")}
+                  —— 切回去会接着原来的聊天。
+                </p>
+              )}
               <div className="row">
                 <select
-                  value={pick[chat.id] ?? ""}
-                  onChange={(event) => setPick((previous) => ({ ...previous, [chat.id]: event.target.value }))}
+                  value={pick[row.key] ?? ""}
+                  onChange={(event) => setPick((previous) => ({ ...previous, [row.key]: event.target.value }))}
                 >
                   <option value="">选一个角色…</option>
                   {props.characters.map((character) => (
@@ -251,17 +297,17 @@ export function WeixinPage(props: { characters: CharacterDto[]; onError: (messag
                   ))}
                 </select>
                 <button
-                  disabled={(pick[chat.id] ?? "").length === 0 || switching === chat.id || props.characters.length === 0}
-                  onClick={() => void switchCharacter(chat)}
+                  disabled={(pick[row.key] ?? "").length === 0 || switching === row.key || props.characters.length === 0}
+                  onClick={() => void switchCharacter(row)}
                 >
-                  {switching === chat.id ? "切换中…" : "切换到这个角色"}
+                  {switching === row.key ? "切换中…" : "切换到这个角色"}
                 </button>
               </div>
               {note !== undefined && <p className="hint">{note}</p>}
             </li>
           );
         })}
-        {chats.length === 0 && (
+        {chatRows.length === 0 && (
           <li className="empty">还没有微信聊天。对方在微信里发一条消息，这里就会出现。</li>
         )}
       </ul>

@@ -39,6 +39,11 @@ export interface ConversationDto {
   characterVersionId?: string | null;
   /** 渠道聊天里"现在在跟谁聊"（微信里用「切换角色 X」换过之后就有值） */
   activeCharacterId?: string | null;
+  /**
+   * 渠道层的会话引用（微信里就是对方的 id）。
+   * 同一个联系人每换一个角色就会多一条会话，界面靠它把同一聊天的多条会话归成一行。
+   */
+  conversationRef?: string | null;
 }
 
 /** 与后端 Core 的通用媒体模型对应（Phase 4.5-A）。 */

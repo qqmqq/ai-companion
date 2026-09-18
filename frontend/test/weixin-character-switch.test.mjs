@@ -61,16 +61,29 @@ function installApi() {
       });
     }
     if (path.endsWith("/api/conversations") && method === "GET") {
+      // 同一个联系人（同一个 conversationRef）有两条会话：换过角色就会这样，界面必须只显示一行
       return json({
         items: [
           {
-            id: "conv-wx-1",
+            id: "conv-wx-old",
             characterId: ARIA.id,
+            title: "微信会话",
+            lastMessageAt: "2026-09-17T03:00:00.000Z",
+            source: "weixin",
+            channel: "weixin",
+            conversationRef: "friend-1",
+            lastMessageText: "换角色之前聊的",
+            activeCharacterId: state.activeCharacterId,
+          },
+          {
+            id: "conv-wx-now",
+            characterId: KAI.id,
             title: "微信会话",
             lastMessageAt: "2026-09-17T04:00:00.000Z",
             source: "weixin",
             channel: "weixin",
-            lastMessageText: "你好",
+            conversationRef: "friend-1",
+            lastMessageText: "现在这条",
             activeCharacterId: state.activeCharacterId,
           },
           { id: "conv-web-1", characterId: ARIA.id, title: "网页会话", lastMessageAt: null, source: "web", channel: "web", lastMessageText: null, activeCharacterId: null },
@@ -79,7 +92,7 @@ function installApi() {
     }
     if (/\/api\/conversations\/[^/]+\/active-character$/.test(path) && method === "PUT") {
       const body = JSON.parse(String(init.body ?? "{}"));
-      state.switchCalls.push(body);
+      state.switchCalls.push({ path, body });
       state.activeCharacterId = body.characterId;
       return json({
         conversationId: "conv-wx-2",
@@ -134,6 +147,12 @@ test("微信页能直接换角色：选人 → 点按钮 → 开场白发出去�
   assert.match(text(), /未指定（按第一个角色回复）/, "没切过的聊天要说清默认按谁回复");
   assert.equal(text().includes("网页会话"), false, "网页会话不该出现在微信页");
 
+  // 回归：同一个联系人有多条会话（换过角色）时，界面上**只能有一行**
+  assert.equal(dom.window.document.querySelectorAll("select").length, 1, "同一个聊天只能出现一个下拉框");
+  assert.equal([...dom.window.document.querySelectorAll("button")].filter((node) => (node.textContent ?? "").includes("切换到这个角色")).length, 1, "同一个聊天只能有一个切换按钮");
+  assert.match(text(), /这个联系人还有 1 个会话/, "要说清还有旧会话");
+  assert.match(text(), /Aria—— 切回去会接着原来的聊天/, "要说明切回去能继续");
+
   const switchButton = button("切换到这个角色");
   assert.equal(switchButton.disabled, true, "没选人之前不能点");
 
@@ -146,7 +165,9 @@ test("微信页能直接换角色：选人 → 点按钮 → 开场白发出去�
   await act(async () => { button("切换到这个角色").dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true })); });
   await settle();
 
-  assert.deepEqual(state.switchCalls, [{ characterId: KAI.id }], "要把选中的角色发给后端");
+  assert.equal(state.switchCalls.length, 1);
+  assert.equal(state.switchCalls[0]?.body.characterId, KAI.id, "要把选中的角色发给后端");
+  assert.ok(String(state.switchCalls[0]?.path).endsWith("/api/conversations/conv-wx-now/active-character"), "要拿现在在聊的那条会话做入口");
   assert.match(text(), /已切换到「Kai」/, "要说清切成了谁");
   assert.match(text(), /开场白已发到微信：「……说吧。」/, "要说清开场白真的发出去了");
   assert.match(text(), /现在在聊/, "刷新后要标出现在在聊谁");
