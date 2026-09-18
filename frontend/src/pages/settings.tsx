@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { api } from "../lib/api.ts";
+import { DS_FREE_PROXY_PRESET } from "../lib/provider-presets.ts";
 import type { ProviderDto, RoutingItemDto, UsageSummaryDto } from "../lib/types.ts";
 import {
   initialModelValue,
@@ -274,6 +275,22 @@ export function SettingsPage(props: { onError: (message: string) => void }) {
     <section className="panel">
       <h2>模型设置</h2>
       <p className="hint">API Key 只保存在本机加密存储中，界面永远不会显示明文。</p>
+
+      <p className="hint">
+        想省钱可以把请求转到自建的 DeepSeek 网页反代（例如
+        <a href="https://github.com/NIyueeE/ds-free-api" target="_blank" rel="noreferrer"> ds-free-api </a>
+        ，本机默认 <code>http://127.0.0.1:22217</code>）：在它的管理面板里建一个 API Key，然后点下面的预设一键填好。
+      </p>
+      <div className="row">
+        <button
+          className="ghost"
+          onClick={() =>
+            setForm({ ...form, ...DS_FREE_PROXY_PRESET })
+          }
+        >
+          预设：DeepSeek 网页反代（127.0.0.1:22217）
+        </button>
+      </div>
 
       <div className="grid">
         <label>
