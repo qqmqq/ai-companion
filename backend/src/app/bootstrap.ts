@@ -35,6 +35,7 @@ import { createCharacterService } from "../core/services/character-service.ts";
 import { createCharacterStudioService } from "../core/services/character-studio-service.ts";
 import { createReminderComposer } from "../core/services/reminder-composer.ts";
 import { createChatCharacterSwitch } from "../core/services/chat-character-switch.ts";
+import { createDsFreeLoginService } from "../integrations/ds-free/service.ts";
 import { createConversationService } from "../core/services/conversation-service.ts";
 import { createSummaryService } from "../core/services/summary-service.ts";
 import { createMessagingPipeline } from "../core/services/messaging-pipeline.ts";
@@ -146,6 +147,8 @@ export interface Container {
   channels: ChannelManager;
   web: WebChannel;
   webHub: ReturnType<typeof createSseHub>;
+  /** 接入助手：开真实网页 → 用户登录 → 自动获取所需（目前用于 DeepSeek 网页反代） */
+  dsFreeLogin: ReturnType<typeof createDsFreeLoginService>;
   keyProvider: KeyProvider;
   user: User;
   webAccountId: string;
@@ -711,6 +714,58 @@ export async function createContainer(options: CreateContainerOptions): Promise<
     intervalMs: config.scheduler.intervalMs,
   });
 
+  /** 重建 Provider 注册表（设置改动、接入助手写入后都要走一遍） */
+  const reloadProviders = async (): Promise<void> => {
+    // 注册表本身是可变对象，重建内容即可生效：TaskLLM / ModelRouter 持有的引用不变。
+    await providers.rebuild(providerConfig.list());
+    // ASR 使用同一份 Provider 配置：改完配置必须一起重建，否则设置页改了 ASR provider 也不会生效
+    await asrProviders.rebuild(providerConfig.list(), settings.get<string | null>("asr.model", null));
+    await ttsProviders.rebuild(
+      providerConfig.list(),
+      settings.get<string | null>("tts.model", null),
+      settings.get<string | null>("tts.voice", null),
+    );
+    logger.info("provider registry reloaded", {
+      providers: providers.list().map((p) => p.id),
+      asrProviders: asrProviders.list().map((p) => p.id),
+      ttsProviders: ttsProviders.list().map((p) => p.id),
+    });
+  };
+
+  /** 接入助手写 provider 这条路由到组合根：写配置 + 密钥进加密库 + 重载 */
+  const dsFreeLogin = createDsFreeLoginService({
+    logger,
+    clock,
+    dataDir: config.dataDir,
+    upsertProvider: async (input) => {
+      const at = clock.nowIso();
+      const existing = providerConfig.get(input.id);
+      providerConfig.upsert({
+        id: input.id,
+        kind: "openai-compatible",
+        displayName: input.displayName,
+        baseUrl: input.baseUrl,
+        defaultModel: input.defaultModel,
+        credentialRef: input.id,
+        requiresCredential: true,
+        timeoutMs: existing?.timeoutMs ?? 60_000,
+        enabled: true,
+        createdAt: existing?.createdAt ?? at,
+        updatedAt: at,
+      });
+      await credentials.putSecret(input.id, { apiKey: input.apiKey });
+      await reloadProviders();
+      audit.append({
+        actor: "user",
+        action: "provider.upsert",
+        targetType: "provider",
+        targetId: input.id,
+        detail: { kind: "openai-compatible", baseUrl: input.baseUrl, source: "ds-free-login-helper" },
+      });
+    },
+    ...(options.fetchImpl === undefined ? {} : { fetchImpl: options.fetchImpl }),
+  });
+
   logger.info("container created", { dataDir: config.dataDir, database: db.kind, providers: providers.list().map((p) => p.id) });
 
   return {
@@ -772,27 +827,13 @@ export async function createContainer(options: CreateContainerOptions): Promise<
     channels,
     web,
     webHub,
+    dsFreeLogin,
     keyProvider,
     user,
     webAccountId,
     startedAt: nowIso(),
     runs,
-    async reloadProviders(): Promise<void> {
-      // 注册表本身是可变对象，重建内容即可生效：TaskLLM / ModelRouter 持有的引用不变。
-      await providers.rebuild(providerConfig.list());
-      // ASR 使用同一份 Provider 配置：改完配置必须一起重建，否则设置页改了 ASR provider 也不会生效
-      await asrProviders.rebuild(providerConfig.list(), settings.get<string | null>("asr.model", null));
-      await ttsProviders.rebuild(
-        providerConfig.list(),
-        settings.get<string | null>("tts.model", null),
-        settings.get<string | null>("tts.voice", null),
-      );
-      logger.info("provider registry reloaded", {
-        providers: providers.list().map((p) => p.id),
-        asrProviders: asrProviders.list().map((p) => p.id),
-        ttsProviders: ttsProviders.list().map((p) => p.id),
-      });
-    },
+    reloadProviders,
     async shutdown(): Promise<void> {
       schedulerRunner.stop();
       await channels.stopAll();

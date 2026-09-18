@@ -11,6 +11,8 @@ import type {
   WeixinLoginDto,
   WeixinStatusDto,
   QqStatusDto,
+  DsFreeHelperStatusDto,
+  DsFreeApplyResultDto,
   ContextPreviewDto,
   ConversationDto,
   MemoryDto,
@@ -275,6 +277,14 @@ export const api = {
   qqClearCredentials: () => request<{ ok: boolean }>("/api/channels/qq/credentials", { method: "DELETE" }),
   weixinRelogin: (accountId: string) =>
     request<{ ok: boolean; reason: string | null }>(`/api/channels/weixin/accounts/${accountId}/relogin`, { method: "POST" }),
+
+  /** 接入助手：开真实网页抓 device_id，再一键把账号/密钥/provider 都配好（密码只在一次请求里用） */
+  dsFreeStatus: () => request<DsFreeHelperStatusDto>("/api/integrations/ds-free/status"),
+  dsFreeStart: (input: { proxyBaseUrl?: string } = {}) =>
+    request<DsFreeHelperStatusDto>("/api/integrations/ds-free/start", { method: "POST", body: JSON.stringify(input) }),
+  dsFreeStop: () => request<DsFreeHelperStatusDto>("/api/integrations/ds-free/stop", { method: "POST" }),
+  dsFreeApply: (input: { email: string; deepseekPassword: string; adminPassword: string; proxyBaseUrl?: string }) =>
+    request<DsFreeApplyResultDto>("/api/integrations/ds-free/apply", { method: "POST", body: JSON.stringify(input) }),
 
   subscribeEvents: (onEvent: (event: StreamEvent) => void): (() => void) => {
     const source = new EventSource("/api/events/stream");

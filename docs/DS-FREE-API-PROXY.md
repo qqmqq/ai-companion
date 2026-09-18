@@ -54,6 +54,54 @@ docker compose -f docker/docker-compose.yaml up -d
 
 验证用的临时 provider 已在验证后删除，你的系统里没有留下测试配置。
 
+## 3.5 不想手动配？用「接入助手」一次点完（打开真实网页 → 你登录 → 自动获取）
+
+日期：2026-09-20 ・ 目的：把上面第 2 步里最麻烦的 `device_id` 与 API Key 变成一次点击。
+
+「模型设置」页 → **接入助手：打开真实网页，自动获取所需**：
+
+1. 点 **打开登录页并自动获取**：本程序会在你的机器上开一个**真实的浏览器窗口**（独立 profile，放在 `data/ds-free-browser/`），
+   打开 `https://chat.deepseek.com/sign_in`，并通过 Chrome DevTools 协议读取页面上的**设备指纹**（数美 `SMSdk.getDeviceId()`，
+   取不到就退到 localStorage 里像设备号的键）。这个设备指纹就是 ds-free-api 登录必需的 `device_id`。
+2. 在那个窗口里正常登录一次 DeepSeek（页面加载完就够；登录只是让指纹更稳）。
+3. 回到本页填三样：DeepSeek 账号（邮箱）、DeepSeek 密码、**反代管理密码**（`/admin` 的密码；没设过就用你填的这个设上）。
+4. 点 **一键写入并配好 provider**，本程序会：
+   - 登录（或首次设置）反代管理面板；
+   - 把账号（邮箱 + 密码 + `device_id`）写进反代账号池；
+   - 在反代里创建一把本程序专用的 API Key（描述为「AI Companion（本机）」）；
+   - 写入反代配置并让它热重载；
+   - 在我们这侧建好 provider `ds-free-proxy`（`baseUrl = http://127.0.0.1:22217`，模型 `deepseek-default`），密钥只进本机加密库。
+5. 完成后去「任务用哪个模型」把要用的任务指到它。
+
+接口（都是本机 HTTP）：
+
+| 方法 | 路径 | 作用 |
+| --- | --- | --- |
+| POST | `/api/integrations/ds-free/start` | 开真实浏览器并开始自动获取（幂等：已在等就返回当前状态） |
+| GET | `/api/integrations/ds-free/status` | 当前阶段、是否已拿到设备指纹、反代在不在；**不含任何密钥字段** |
+| POST | `/api/integrations/ds-free/stop` | 停止等待并清空本轮的抓取状态 |
+| POST | `/api/integrations/ds-free/apply` | 一键写入（账号池 + API Key + provider），只回掩码 |
+
+**纪律与边界**（代码注释里写了，也有用例守着）：
+
+- 密码只在这一次请求里使用，**不落库、不进日志**；回给界面的只有掩码（`sk-dsfree-01…cdef` 这种）；
+- 设备指纹是唯一硬门槛：没拿到就不允许写入，并明确提示「先点打开登录页并自动获取」；
+- 找不到 Chrome/Edge 时如实报错，可以用环境变量 `COMPANION_BROWSER_PATH` 指定浏览器可执行文件；
+- 浏览器 profile 独立于你日常用的浏览器，关掉那个窗口不影响这次写入。
+
+### 已验证到什么程度
+
+| 项目 | 状态 |
+| --- | --- |
+| 抓取逻辑（页面表达式 → 设备指纹 → 状态提示） | ✅ 单元用例：空值/占位值/超长值一律当没拿到，未知状态不显示 `undefined` |
+| 一键写入全链路 | ✅ 集成用例：对**反代管理 API 的测试替身**跑完整流程（首次设密码 / 密码错 / 账号已存在 / 密钥复用 / 没指纹不许写），断言写进反代的账号含 `device_id`、密钥只有一把、provider 配置正确 |
+| 接口层 | ✅ 用例：状态接口不含 `password/apiKey/token` 任何字段；没指纹时一键写入返回中文可操作提示；管理密码过短在入口拦截 |
+| 界面 | ✅ 用例：阶段文案中文化、未知阶段不显示 `undefined`、密码提交后立刻清空且页面不回显 |
+| 真实页面抓取（本机 Chrome 打真实 DeepSeek 登录页） | ✅ **实测**：本机 Chrome 无头启动 → CDP 读 `https://chat.deepseek.com/sign_in` → `hasSmsdk: true`，`SMSdk.getDeviceId()` 返回 88 字符指纹；同一页面的 localStorage 里也能看到 `deepseek-device-id:chat`、`smidV2` 这类键 |
+| 反代管理协议（对 v0.2.11 真实进程） | ✅ **实测**：`/health` 可达；首次 `ensureAdminToken` 走 403→`/admin/api/setup` 设上密码；`GET/PUT /admin/api/config` 结构确认为 `server / ds_core / proxy / admin / api_keys`；写进去的账号（含 `device_id`）与 API Key 都持久化成功，重复加同一邮箱不会变成两条 |
+| 生成的 Key 真的能用 | ✅ **实测**：用上面写进去的 Key 请求反代 `/v1/models` → 200，返回 `deepseek-default` |
+| 真实 DeepSeek 账号走完一轮对话 | ⏳ **还没跑**：需要你填自己的 DeepSeek 邮箱与密码（我不该也不会有你的账号）；填完点一次「一键写入」即可 |
+| 界面上真的点过按钮（真窗口的可视化确认） | ⏳ 组件级用例 + Vite 开发服务器实编译通过；本机浏览器里的目视确认留给你 |
 ## 4. 要说清的风险（别只看省钱）
 
 - **非官方**：它依赖 DeepSeek 网页端的行为，对方改版就可能失效；本项目与它没有任何关系；
@@ -77,5 +125,7 @@ docker compose -f docker/docker-compose.yaml up -d
 | --- | --- |
 | PRESET_ADDED | VERIFIED —— 「模型设置」一键预设，baseUrl 不带 `/v1`（有用例守住） |
 | WIRING_VERIFIED | VERIFIED —— 真机：provider → 反代 `/v1/models` 打通，上游 401 如实上报 |
-| END_TO_END_PENDING | PENDING —— 需要你配置 DeepSeek 网页账号与 API Key 后才能真跑一轮 |
+| REAL_PAGE_CAPTURE | VERIFIED —— 本机 Chrome 打真实登录页，设备指纹成功取出 |
+| ADMIN_PROTOCOL | VERIFIED —— 对真实 v0.2.11 进程完成「首次设密码 → 写账号+Key → 读回 → 生成的 Key 能调 /v1/models」 |
+| END_TO_END_PENDING | PENDING —— 你填自己的 DeepSeek 账号后点一次「一键写入」即可闭环 |
 | NO_CODE_COPIED | VERIFIED —— 只调用 HTTP 接口，未复制/链接 GPL-3.0 代码 |

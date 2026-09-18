@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { api } from "../lib/api.ts";
 import { DS_FREE_PROXY_PRESET } from "../lib/provider-presets.ts";
+import { DsFreeLoginPanel } from "./ds-free-login.tsx";
 import type { ProviderDto, RoutingItemDto, UsageSummaryDto } from "../lib/types.ts";
 import {
   initialModelValue,
@@ -279,7 +280,7 @@ export function SettingsPage(props: { onError: (message: string) => void }) {
       <p className="hint">
         想省钱可以把请求转到自建的 DeepSeek 网页反代（例如
         <a href="https://github.com/NIyueeE/ds-free-api" target="_blank" rel="noreferrer"> ds-free-api </a>
-        ，本机默认 <code>http://127.0.0.1:22217</code>）：在它的管理面板里建一个 API Key，然后点下面的预设一键填好。
+        ，本机默认 <code>http://127.0.0.1:22217</code>）。不会配也没关系：用下面的「接入助手」一次点完；已经自己在管理面板建过 API Key 的话，也可以点预设手动填。
       </p>
       <div className="row">
         <button
@@ -336,6 +337,8 @@ export function SettingsPage(props: { onError: (message: string) => void }) {
       <button disabled={form.baseUrl.trim().length === 0 || form.defaultModel.trim().length === 0} onClick={() => void handleSave()}>
         保存
       </button>
+
+      <DsFreeLoginPanel onError={props.onError} onApplied={() => void refresh()} />
 
       <h2>已配置的模型</h2>
       <ul className="cards">

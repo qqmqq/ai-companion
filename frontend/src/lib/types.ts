@@ -327,6 +327,31 @@ export interface QqStatusDto {
   accounts: Array<{ id: string; externalAccountId: string; displayName: string; status: string }>;
 }
 
+/** 接入助手（打开真实网页 → 登录 → 自动获取所需）：界面只拿得到掩码，密码不回首 */
+export interface DsFreeHelperStatusDto {
+  phase: "idle" | "waiting_login" | "captured" | "error";
+  deviceId: string | null;
+  pageState: { url: string; hasSmsdk: boolean; tokenKeys: string[] } | null;
+  pageHint: string;
+  browser: string | null;
+  debugPort: number | null;
+  signInUrl: string;
+  proxyBaseUrl: string;
+  proxyReachable: boolean | null;
+  lastError: string | null;
+}
+
+export interface DsFreeApplyResultDto {
+  ok: boolean;
+  providerId: string;
+  proxyBaseUrl: string;
+  apiKeyMasked: string;
+  accountAdded: boolean;
+  deviceIdAttached: boolean;
+  adminPasswordCreated: boolean;
+  steps: string[];
+}
+
 export interface WeixinAccountDto {
   accountId: string;
   displayName: string;
