@@ -21,6 +21,8 @@ export interface MockDsFreeServer {
   putCount: number;
   setupCount: number;
   loginCount: number;
+  /** 反代在不在：用来模拟「还没启动 → 我们替它启动 → 它起来了」 */
+  setReachable(value: boolean): void;
   close(): Promise<void>;
 }
 
@@ -40,6 +42,7 @@ function json(response: ServerResponse, status: number, body: unknown): void {
 
 export async function startMockDsFreeServer(options: { adminPassword?: string | null; seedConfig?: Record<string, unknown> } = {}): Promise<MockDsFreeServer> {
   let adminPassword = options.adminPassword ?? null;
+  let reachable = true;
   const token = "test-admin-token";
   const state: MockDsFreeServer = {
     baseUrl: "",
@@ -49,6 +52,9 @@ export async function startMockDsFreeServer(options: { adminPassword?: string | 
     putCount: 0,
     setupCount: 0,
     loginCount: 0,
+    setReachable: (value: boolean) => {
+      reachable = value;
+    },
     close: async () => {},
   };
 
@@ -57,6 +63,10 @@ export async function startMockDsFreeServer(options: { adminPassword?: string | 
       const url = request.url ?? "/";
       const method = request.method ?? "GET";
       if (method === "GET" && url === "/health") {
+        if (!reachable) {
+          json(response, 503, { error: { message: "not ready" } });
+          return;
+        }
         json(response, 200, { status: "ok" });
         return;
       }

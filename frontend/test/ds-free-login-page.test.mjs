@@ -17,6 +17,8 @@ const { act } = React;
 const { createRoot } = await import("react-dom/client");
 const { DsFreeLoginPanel } = await import("../src/pages/ds-free-login.tsx");
 
+const PROJECT_URL = "https://github.com/NIyueeE/ds-free-api";
+
 function json(payload) {
   return new Response(JSON.stringify(payload), { status: 200, headers: { "content-type": "application/json" } });
 }
@@ -30,28 +32,54 @@ async function settle(rounds = 8) {
 function statusBody(overrides = {}) {
   return {
     phase: "idle",
+    preparing: false,
     deviceId: null,
     pageState: null,
     pageHint: "还没读到页面（浏览器可能还在启动）",
     browser: null,
     debugPort: null,
+    browserClosed: null,
     signInUrl: "https://chat.deepseek.com/sign_in",
     proxyBaseUrl: "http://127.0.0.1:22217",
     proxyReachable: true,
+    proxyStarted: null,
+    proxyNote: "",
+    proxyProjectUrl: PROJECT_URL,
+    binaryPath: null,
+    providerId: null,
+    providerNote: "",
     lastError: null,
     ...overrides,
   };
 }
 
+/** 抓完自动收尾之后的样子：关窗 + 起反代 + 加模型 */
+function capturedBody(overrides = {}) {
+  return statusBody({
+    phase: "captured",
+    deviceId: "0123456789abcdef0123456789abcdef",
+    browser: "Google Chrome",
+    debugPort: 9222,
+    browserClosed: true,
+    proxyStarted: true,
+    proxyNote: "已自动启动反代（http://127.0.0.1:22217）",
+    binaryPath: "D:/tools/ds-free-api.exe",
+    providerId: "ds-free-proxy",
+    providerNote: "已把模型 deepseek-default 加入「已配置的模型」；密钥在你点一键写入时补齐",
+    pageHint: "已读到页面，设备指纹 SDK 就绪",
+    ...overrides,
+  });
+}
+
 function installApi(initial) {
-  const state = { status: initial, starts: 0, applies: [], stops: 0 };
+  const state = { status: initial, starts: [], applies: [], stops: 0 };
   globalThis.fetch = async (input, init = {}) => {
     const path = String(input).split("?")[0];
     const method = (init.method ?? "GET").toUpperCase();
     if (path.endsWith("/api/integrations/ds-free/status")) return json(state.status);
     if (path.endsWith("/api/integrations/ds-free/start") && method === "POST") {
-      state.starts += 1;
-      state.status = statusBody({ phase: "captured", deviceId: "0123456789abcdef0123456789abcdef", browser: "Google Chrome", debugPort: 9222, pageHint: "已读到页面，设备指纹 SDK 就绪" });
+      state.starts.push(JSON.parse(String(init.body ?? "{}")));
+      state.status = capturedBody();
       return json(state.status);
     }
     if (path.endsWith("/api/integrations/ds-free/stop") && method === "POST") {
@@ -60,8 +88,7 @@ function installApi(initial) {
       return json(state.status);
     }
     if (path.endsWith("/api/integrations/ds-free/apply") && method === "POST") {
-      const body = JSON.parse(String(init.body));
-      state.applies.push(body);
+      state.applies.push(JSON.parse(String(init.body)));
       return json({
         ok: true,
         providerId: "ds-free-proxy",
@@ -111,7 +138,7 @@ function button(label) {
   return found;
 }
 
-test("还没开始时：状态是中文，没拿到设备指纹就不让写入", async () => {
+test("面板上标明反代是别人的开源项目，并在没拿到指纹时不让写入", async () => {
   installApi(statusBody());
   const { root, errors } = await mount();
   assert.match(text(), /还没开始/);
@@ -119,37 +146,62 @@ test("还没开始时：状态是中文，没拿到设备指纹就不让写入",
   assert.equal(button("一键写入并配好 provider").disabled, true, "没拿到设备指纹不该能写");
   assert.match(text(), /先点上面的按钮拿到设备指纹/);
   assert.equal(text().includes("undefined"), false, "界面不能出现 undefined");
+  // 来源必须写清楚：这是别人的 GPL 项目，我们只调用它
+  assert.match(text(), /ds-free-api/);
+  assert.match(text(), /GPL-3.0/);
+  const link = [...dom.window.document.querySelectorAll("a")].find((node) => node.getAttribute("href") === PROJECT_URL);
+  assert.ok(link !== undefined, "要给出来源链接：" + PROJECT_URL);
   assert.deepEqual(errors, []);
   await act(async () => { root.unmount(); });
 });
 
-test("点「打开登录页并自动获取」：拿回设备指纹，写入按钮才可用", async () => {
+test("点「打开登录页并自动获取」：抓到后显示已自动关窗、已自动启动反代、模型已加入", async () => {
   const state = installApi(statusBody());
-  const { root } = await mount();
+  const { root, appliedCount } = await mount();
   await act(async () => { button("打开登录页并自动获取").dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true })); });
   await settle();
-  assert.equal(state.starts, 1);
+  assert.deepEqual(state.starts, [{}]);
   assert.match(text(), /已拿到所需信息/);
   assert.match(text(), /设备指纹：已获取/);
-  assert.match(text(), /浏览器：Google Chrome/);
+  assert.match(text(), /登录页：已自动关闭/);
+  assert.match(text(), /反代：已自动启动/);
+  assert.match(text(), /模型：ds-free-proxy/);
+  assert.match(text(), /已把模型 deepseek-default 加入「已配置的模型」/);
+  assert.equal(appliedCount(), 1, "模型加进「已配置的模型」后要让设置页刷新一次");
+  // 反代已经在跑：就不该再追着用户要程序路径
+  assert.equal(inputByPlaceholder("ds-free-api.exe"), undefined);
+  await act(async () => { root.unmount(); });
+});
 
-  // 三个字段都填齐之前仍然不允许提交
-  assert.equal(button("一键写入并配好 provider").disabled, true);
-  await act(async () => {
-    setValue(inputByPlaceholder("DeepSeek 登录邮箱"), "someone@example.com");
-    setValue(inputByPlaceholder("只用于这一次写入"), "deepseek-password");
-  });
-  await settle(2);
-  assert.equal(button("一键写入并配好 provider").disabled, true, "管理密码还空着");
-  await act(async () => { setValue(inputByPlaceholder("管理面板的密码"), "admin-password"); });
-  await settle(2);
-  assert.equal(button("一键写入并配好 provider").disabled, false);
+test("反代没起来时：提示去哪儿下这个开源项目，并给出路径输入框", async () => {
+  installApi(statusBody({
+    phase: "captured",
+    deviceId: "0123456789abcdef0123456789abcdef",
+    browserClosed: true,
+    proxyReachable: false,
+    proxyNote: "没找到反代程序。它是开源项目 ds-free-api（https://github.com/NIyueeE/ds-free-api），需要你自己下载。",
+    providerId: "ds-free-proxy",
+  }));
+  const { root } = await mount();
+  assert.match(text(), /反代：没连上/);
+  assert.match(text(), /github\.com\/NIyueeE\/ds-free-api/);
+  assert.ok(inputByPlaceholder("ds-free-api.exe") !== undefined, "找不到程序时应该让用户填一次路径");
+  await act(async () => { root.unmount(); });
+});
+
+test("填了反代路径：原样交给后端（它会记住）", async () => {
+  const state = installApi(statusBody({ phase: "captured", deviceId: "0123456789abcdef0123456789abcdef", proxyReachable: false }));
+  const { root } = await mount();
+  await act(async () => { setValue(inputByPlaceholder("ds-free-api.exe"), "D:/tools/ds-free-api.exe"); });
+  await act(async () => { button("重新打开登录页并获取").dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true })); });
+  await settle();
+  assert.deepEqual(state.starts, [{ binaryPath: "D:/tools/ds-free-api.exe" }]);
   await act(async () => { root.unmount(); });
 });
 
 test("一键写入：密码原样交给后端，用完立刻清空，界面只显示掩码", async () => {
-  const state = installApi(statusBody({ phase: "captured", deviceId: "0123456789abcdef0123456789abcdef" }));
-  const { root, appliedCount } = await mount();
+  const state = installApi(capturedBody());
+  const { root } = await mount();
   await act(async () => {
     setValue(inputByPlaceholder("DeepSeek 登录邮箱"), "someone@example.com");
     setValue(inputByPlaceholder("只用于这一次写入"), "deepseek-password");
@@ -166,7 +218,6 @@ test("一键写入：密码原样交给后端，用完立刻清空，界面只�
   assert.equal(text().includes("admin-password"), false, "页面上不该出现管理密码");
   assert.match(text(), /sk-dsfree-01…cdef/, "只显示掩码");
   assert.match(text(), /已在反代里创建本程序专用的 API Key/);
-  assert.equal(appliedCount(), 1, "配好之后要让模型列表刷新一次");
   await act(async () => { root.unmount(); });
 });
 
@@ -186,4 +237,3 @@ test("未知阶段也不给用户看 undefined", async () => {
   assert.equal(text().includes("undefined"), false);
   await act(async () => { root.unmount(); });
 });
-

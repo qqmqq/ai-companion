@@ -36,6 +36,10 @@ import { createCharacterStudioService } from "../core/services/character-studio-
 import { createReminderComposer } from "../core/services/reminder-composer.ts";
 import { createChatCharacterSwitch } from "../core/services/chat-character-switch.ts";
 import { createDsFreeLoginService, pickProviderTarget } from "../integrations/ds-free/service.ts";
+import { createDsFreeProxyProcess } from "../integrations/ds-free/proxy-process.ts";
+
+/** 用户告诉过我们一次的反代可执行文件路径（下次直接用） */
+const DS_FREE_BINARY_SETTING = "dsFree.binaryPath";
 import { createConversationService } from "../core/services/conversation-service.ts";
 import { createSummaryService } from "../core/services/summary-service.ts";
 import { createMessagingPipeline } from "../core/services/messaging-pipeline.ts";
@@ -742,30 +746,38 @@ export async function createContainer(options: CreateContainerOptions): Promise<
       // 已经有一条指向同一个反代的 provider（例如先手动加过预设）就复用它，别造出重复记录
       const targetId = pickProviderTarget(providerConfig.list(), { id: input.id, baseUrl: input.baseUrl });
       const existing = providerConfig.get(targetId);
+      // apiKey 为空 = 只是"先把模型登记上"，密钥等一键写入时再写；此时不动已有的密钥引用
+      const hasKey = typeof input.apiKey === "string" && input.apiKey.length > 0;
       providerConfig.upsert({
         id: targetId,
         kind: "openai-compatible",
         displayName: input.displayName,
         baseUrl: input.baseUrl,
         defaultModel: input.defaultModel,
-        credentialRef: targetId,
+        credentialRef: hasKey ? targetId : (existing?.credentialRef ?? null),
         requiresCredential: true,
         timeoutMs: existing?.timeoutMs ?? 60_000,
         enabled: true,
         createdAt: existing?.createdAt ?? at,
         updatedAt: at,
       });
-      await credentials.putSecret(targetId, { apiKey: input.apiKey });
+      if (hasKey) await credentials.putSecret(targetId, { apiKey: input.apiKey });
       await reloadProviders();
       audit.append({
         actor: "user",
         action: "provider.upsert",
         targetType: "provider",
         targetId,
-        detail: { kind: "openai-compatible", baseUrl: input.baseUrl, source: "ds-free-login-helper" },
+        detail: { kind: "openai-compatible", baseUrl: input.baseUrl, source: "ds-free-login-helper", credentialWritten: hasKey },
       });
       return targetId;
     },
+    proxyProcess: createDsFreeProxyProcess({
+      logger,
+      dataDir: config.dataDir,
+      rememberedPath: () => settings.get<string | null>(DS_FREE_BINARY_SETTING, null),
+      rememberPath: (path) => settings.put(DS_FREE_BINARY_SETTING, path, clock.nowIso()),
+    }),
     ...(options.fetchImpl === undefined ? {} : { fetchImpl: options.fetchImpl }),
   });
 

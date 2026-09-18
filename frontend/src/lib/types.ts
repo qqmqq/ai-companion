@@ -330,14 +330,27 @@ export interface QqStatusDto {
 /** 接入助手（打开真实网页 → 登录 → 自动获取所需）：界面只拿得到掩码，密码不回首 */
 export interface DsFreeHelperStatusDto {
   phase: "idle" | "waiting_login" | "captured" | "error";
+  /** 抓完之后还在自动收尾（关窗、起反代、加模型） */
+  preparing: boolean;
   deviceId: string | null;
   pageState: { url: string; hasSmsdk: boolean; tokenKeys: string[] } | null;
   pageHint: string;
   browser: string | null;
   debugPort: number | null;
+  /** 拿到设备指纹后自动关掉浏览器窗口的结果 */
+  browserClosed: boolean | null;
   signInUrl: string;
   proxyBaseUrl: string;
   proxyReachable: boolean | null;
+  /** 这次是不是我们替你启动的反代 */
+  proxyStarted: boolean | null;
+  proxyNote: string;
+  /** 反代程序来源（别人的开源项目，界面上要标明） */
+  proxyProjectUrl: string;
+  binaryPath: string | null;
+  /** 自动加进「已配置的模型」的那条 provider */
+  providerId: string | null;
+  providerNote: string;
   lastError: string | null;
 }
 

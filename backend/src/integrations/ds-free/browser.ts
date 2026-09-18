@@ -16,8 +16,13 @@ export interface BrowserCandidate {
   path: string;
 }
 
-/** Windows 上常见的 Chrome / Edge 路径；可用环境变量 COMPANION_BROWSER_PATH 覆盖 */
+/**
+ * Windows 上常见的 Chrome / Edge 路径；可用环境变量 COMPANION_BROWSER_PATH 覆盖。
+ * 一旦指定了覆盖路径，就只用它 —— 指定了还偷偷回退到系统浏览器，会让人以为"关掉了却还是开窗"。
+ */
 export function defaultBrowserCandidates(): BrowserCandidate[] {
+  const override = process.env["COMPANION_BROWSER_PATH"];
+  if (typeof override === "string" && override.length > 0) return [{ name: "自定义", path: override }];
   const programFiles = process.env["ProgramFiles"] ?? "C:/Program Files";
   const programFilesX86 = process.env["ProgramFiles(x86)"] ?? "C:/Program Files (x86)";
   const localAppData = process.env["LOCALAPPDATA"] ?? "";
@@ -30,8 +35,6 @@ export function defaultBrowserCandidates(): BrowserCandidate[] {
   if (localAppData.length > 0) {
     candidates.push({ name: "Chrome", path: localAppData + "/Google/Chrome/Application/chrome.exe" });
   }
-  const override = process.env["COMPANION_BROWSER_PATH"];
-  if (typeof override === "string" && override.length > 0) candidates.unshift({ name: "自定义", path: override });
   return candidates;
 }
 
@@ -120,10 +123,11 @@ export async function waitForPageTarget(input: {
   return null;
 }
 
-/** 在页面里执行一段表达式并拿回值（一次连接、一条命令，用完就关） */
-export async function cdpEvaluate(input: {
+/** 连一次 CDP、发一条命令、拿回 result（超时或出错一律返回 null，不抛） */
+export async function cdpSend(input: {
   webSocketDebuggerUrl: string;
-  expression: string;
+  method: string;
+  params?: Record<string, unknown>;
   timeoutMs?: number;
   webSocketImpl?: typeof WebSocket;
 }): Promise<unknown> {
@@ -150,19 +154,13 @@ export async function cdpEvaluate(input: {
     };
 
     socket.addEventListener("open", () => {
-      socket.send(
-        JSON.stringify({
-          id: 1,
-          method: "Runtime.evaluate",
-          params: { expression: input.expression, returnByValue: true, awaitPromise: true },
-        }),
-      );
+      socket.send(JSON.stringify({ id: 1, method: input.method, params: input.params ?? {} }));
     });
     socket.addEventListener("message", (event: { data: unknown }) => {
       try {
-        const frame = JSON.parse(String(event.data)) as { id?: number; result?: { result?: { value?: unknown } } };
+        const frame = JSON.parse(String(event.data)) as { id?: number; result?: unknown };
         if (frame.id !== 1) return;
-        finish(frame.result?.result?.value ?? null);
+        finish(frame.result ?? null);
       } catch {
         finish(null);
       }
@@ -170,5 +168,51 @@ export async function cdpEvaluate(input: {
     socket.addEventListener("error", () => finish(null));
     socket.addEventListener("close", () => finish(null));
   });
+}
+
+/** 在页面里执行一段表达式并拿回值（一次连接、一条命令，用完就关） */
+export async function cdpEvaluate(input: {
+  webSocketDebuggerUrl: string;
+  expression: string;
+  timeoutMs?: number;
+  webSocketImpl?: typeof WebSocket;
+}): Promise<unknown> {
+  const result = (await cdpSend({
+    webSocketDebuggerUrl: input.webSocketDebuggerUrl,
+    method: "Runtime.evaluate",
+    params: { expression: input.expression, returnByValue: true, awaitPromise: true },
+    ...(input.timeoutMs === undefined ? {} : { timeoutMs: input.timeoutMs }),
+    ...(input.webSocketImpl === undefined ? {} : { webSocketImpl: input.webSocketImpl }),
+  })) as { result?: { value?: unknown } } | null;
+  return result?.result?.value ?? null;
+}
+
+/**
+ * 关掉我们自己开的那个浏览器窗口。
+ * 走 CDP 的 Browser.close（而不是 kill 进程）：Chrome 是多进程的，让它自己体面退出更干净。
+ */
+export async function closeBrowser(input: {
+  debugPort: number;
+  fetchImpl?: typeof fetch;
+  timeoutMs?: number;
+  webSocketImpl?: typeof WebSocket;
+}): Promise<boolean> {
+  const doFetch = input.fetchImpl ?? fetch;
+  try {
+    const response = await doFetch("http://127.0.0.1:" + String(input.debugPort) + "/json/version");
+    if (!response.ok) return false;
+    const info = (await response.json()) as { webSocketDebuggerUrl?: unknown };
+    if (typeof info.webSocketDebuggerUrl !== "string") return false;
+    await cdpSend({
+      webSocketDebuggerUrl: info.webSocketDebuggerUrl,
+      method: "Browser.close",
+      timeoutMs: input.timeoutMs ?? 4000,
+      ...(input.webSocketImpl === undefined ? {} : { webSocketImpl: input.webSocketImpl }),
+    });
+    return true;
+  } catch {
+    // 浏览器已经关了 / 端口没了：对调用方来说结果一样（窗口不在了）
+    return false;
+  }
 }
 

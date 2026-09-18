@@ -15,13 +15,20 @@ const ApplySchema = z.object({
   proxyBaseUrl: z.string().max(300).optional(),
 });
 
-const StartSchema = z.object({ proxyBaseUrl: z.string().max(300).optional() });
+const StartSchema = z.object({
+  proxyBaseUrl: z.string().max(300).optional(),
+  /** 用户告诉我们的反代可执行文件路径（找不到时才需要填，填一次就记住） */
+  binaryPath: z.string().max(500).optional(),
+});
 
 export function registerIntegrationRoutes(app: FastifyInstance, container: Container): void {
   /** 打开真实浏览器并开始自动抓取（幂等：已经在等就返回当前状态） */
   app.post("/api/integrations/ds-free/start", async (request) => {
     const body = parseOrThrow(StartSchema, request.body ?? {});
-    return await container.dsFreeLogin.start(body.proxyBaseUrl === undefined ? {} : { proxyBaseUrl: body.proxyBaseUrl });
+    return await container.dsFreeLogin.start({
+      ...(body.proxyBaseUrl === undefined ? {} : { proxyBaseUrl: body.proxyBaseUrl }),
+      ...(body.binaryPath === undefined ? {} : { binaryPath: body.binaryPath }),
+    });
   });
 
   app.get("/api/integrations/ds-free/status", async () => await container.dsFreeLogin.status());

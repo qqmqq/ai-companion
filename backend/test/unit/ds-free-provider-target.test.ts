@@ -1,8 +1,20 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { DS_FREE_PROVIDER_ID, pickProviderTarget } from "../../src/integrations/ds-free/service.ts";
+import { DS_FREE_DEFAULT_BASE_URL, DS_FREE_MODEL, DS_FREE_PROVIDER_ID, pickProviderTarget } from "../../src/integrations/ds-free/service.ts";
+import { DS_FREE_PROJECT_URL } from "../../src/integrations/ds-free/proxy-process.ts";
 
 const PROXY = "http://127.0.0.1:22217";
+
+test("反代地址与模型名：baseUrl 不带 /v1（我们自己的 provider 会拼 /v1/...）", () => {
+  assert.equal(DS_FREE_DEFAULT_BASE_URL, PROXY);
+  assert.equal(DS_FREE_DEFAULT_BASE_URL.endsWith("/v1"), false, "带上 /v1 会拼成 /v1/v1/chat/completions");
+  assert.equal(DS_FREE_DEFAULT_BASE_URL.includes("/v1/"), false);
+  assert.equal(DS_FREE_MODEL, "deepseek-default");
+});
+
+test("反代来源必须指向那个开源项目（界面要标明，不能让人以为是我们写的）", () => {
+  assert.equal(DS_FREE_PROJECT_URL, "https://github.com/NIyueeE/ds-free-api");
+});
 
 test("已经有指向同一个反代的 provider 就复用它（先手动加过预设再点一键写入不该变成两条）", () => {
   const existing = [

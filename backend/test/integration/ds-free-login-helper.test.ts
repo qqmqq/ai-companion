@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { createDsFreeLoginService, DS_FREE_PROVIDER_ID } from "../../src/integrations/ds-free/service.ts";
+import { createDsFreeLoginService, DS_FREE_MODEL, DS_FREE_PROVIDER_ID } from "../../src/integrations/ds-free/service.ts";
+import { DS_FREE_PROJECT_URL } from "../../src/integrations/ds-free/proxy-process.ts";
 import { createLogger } from "../../src/app/logger.ts";
 import { createFakeClock } from "../helpers/fake-clock.ts";
 import { startMockDsFreeServer } from "../helpers/mock-dsfree-server.ts";
@@ -11,14 +12,21 @@ function logger() {
   return createLogger({ level: "error", sink: () => {} });
 }
 
-/** 假浏览器：不真的开窗口，只记录开在了哪个 URL、哪个 profile */
+interface ProviderCall {
+  id: string;
+  baseUrl: string;
+  defaultModel: string;
+  apiKey?: string;
+}
+
+/** 假浏览器：不真的开窗口，只记录开在了哪个 URL、有没有被关掉 */
 function fakeBrowserHarness(input: { deviceId?: string | null; pageState?: unknown } = {}) {
   const opened: Array<{ url: string; profileDir: string; debugPort: number }> = [];
-  const evaluated: string[] = [];
+  const closed: number[] = [];
   const deviceId = input.deviceId === undefined ? DEVICE_ID : input.deviceId;
   return {
     opened,
-    evaluated,
+    closed,
     findBrowserImpl: () => ({ name: "测试浏览器", path: "C:/fake/chrome.exe" }),
     findFreePortImpl: async () => 9333,
     launchBrowserImpl: (options: { url: string; profileDir: string; debugPort: number }) => {
@@ -27,41 +35,83 @@ function fakeBrowserHarness(input: { deviceId?: string | null; pageState?: unkno
     waitForPageTargetImpl: async () => ({ id: "page-1", type: "page", webSocketDebuggerUrl: "ws://127.0.0.1:9333/devtools/page/page-1", url: "https://chat.deepseek.com/sign_in" }),
     // 注入的实现直接给「页面返回的值」（真实的那个会自己剥掉 CDP 外壳）
     cdpEvaluateImpl: async (options: { expression: string }) => {
-      evaluated.push(options.expression);
       // 页面状态表达式里也提到 SMSdk，所以按它独有的字段区分
       if (options.expression.includes("hasSmsdk")) {
         return input.pageState === undefined ? { url: "https://chat.deepseek.com/sign_in", hasSmsdk: true, tokenKeys: [] } : input.pageState;
       }
       return deviceId;
     },
+    closeBrowserImpl: async (options: { debugPort: number }) => {
+      closed.push(options.debugPort);
+      return true;
+    },
   };
 }
 
-async function waitForCapture(service: { status: () => Promise<{ phase: string }> }): Promise<void> {
-  for (let index = 0; index < 100; index += 1) {
+/** 假反代进程管理：记录"找到没、起没起" */
+function fakeProxyProcess(input: { binaryPath?: string | null; onStart?: () => void; startResult?: { ok: boolean; reason: string } } = {}) {
+  const binaryPath = input.binaryPath === undefined ? "C:/tools/ds-free-api.exe" : input.binaryPath;
+  const calls: { located: number; started: string[]; remembered: string[] } = { located: 0, started: [], remembered: [] };
+  return {
+    calls,
+    locate: () => {
+      calls.located += 1;
+      return binaryPath;
+    },
+    start: (path: string) => {
+      calls.started.push(path);
+      input.onStart?.();
+      return input.startResult ?? { ok: true, reason: "" };
+    },
+    remember: (path: string) => {
+      calls.remembered.push(path);
+    },
+    guidance: () => "没找到反代程序。它是开源项目 ds-free-api（" + DS_FREE_PROJECT_URL + "），需要你自己下载。",
+  };
+}
+
+async function waitForCapture(service: { status: () => Promise<{ phase: string; preparing: boolean }> }): Promise<void> {
+  for (let index = 0; index < 200; index += 1) {
     const status = await service.status();
-    if (status.phase === "captured" || status.phase === "error") return;
+    if (status.phase === "error") return;
+    if (status.phase === "captured" && !status.preparing) return;
     await new Promise((resolve) => setTimeout(resolve, 10));
   }
 }
 
-test("接入助手：打开真实网页 → 自动拿到设备指纹 → 一键写进反代并配好 provider", async () => {
+function makeService(input: {
+  proxyBaseUrl: string;
+  browser: ReturnType<typeof fakeBrowserHarness>;
+  proxyProcess: ReturnType<typeof fakeProxyProcess>;
+  written: ProviderCall[];
+  randomKey?: () => string;
+}) {
+  return createDsFreeLoginService({
+    logger: logger(),
+    clock: createFakeClock(),
+    dataDir: "C:/tmp/companion-test",
+    upsertProvider: async (call) => {
+      input.written.push(call);
+      return call.id;
+    },
+    proxyProcess: input.proxyProcess,
+    findBrowserImpl: input.browser.findBrowserImpl,
+    findFreePortImpl: input.browser.findFreePortImpl,
+    launchBrowserImpl: input.browser.launchBrowserImpl,
+    waitForPageTargetImpl: input.browser.waitForPageTargetImpl,
+    cdpEvaluateImpl: input.browser.cdpEvaluateImpl,
+    closeBrowserImpl: input.browser.closeBrowserImpl,
+    ...(input.randomKey === undefined ? {} : { randomKey: input.randomKey }),
+  });
+}
+
+test("接入助手：打开真实网页 → 自动拿到设备指纹 → 自动关窗、起反代、加模型 → 一键写入", async () => {
   const proxy = await startMockDsFreeServer({ adminPassword: null });
-  const written: Array<{ id: string; baseUrl: string; defaultModel: string; apiKey: string }> = [];
+  const written: ProviderCall[] = [];
   try {
     const browser = fakeBrowserHarness();
-    const service = createDsFreeLoginService({
-      logger: logger(),
-      clock: createFakeClock(),
-      dataDir: "C:/tmp/companion-test",
-      upsertProvider: async (input) => { written.push(input); return input.id; },
-      randomKey: () => "0123456789abcdef",
-      findBrowserImpl: browser.findBrowserImpl,
-      findFreePortImpl: browser.findFreePortImpl,
-      launchBrowserImpl: browser.launchBrowserImpl,
-      waitForPageTargetImpl: browser.waitForPageTargetImpl,
-      cdpEvaluateImpl: browser.cdpEvaluateImpl,
-    });
+    const proxyProcess = fakeProxyProcess();
+    const service = makeService({ proxyBaseUrl: proxy.baseUrl, browser, proxyProcess, written, randomKey: () => "0123456789abcdef" });
 
     const started = await service.start({ proxyBaseUrl: proxy.baseUrl });
     // 抓取是异步的：status 这一次返回可能是「等登录」也可能是已经抓到，两种都算正常
@@ -76,9 +126,27 @@ test("接入助手：打开真实网页 → 自动拿到设备指纹 → 一键�
     await waitForCapture(service);
     const status = await service.status();
     assert.equal(status.phase, "captured");
+    assert.equal(status.preparing, false, "收尾做完就不该还在 preparing");
     assert.equal(status.deviceId, DEVICE_ID);
-    assert.equal(status.proxyReachable, true);
     assert.equal(status.pageHint, "已读到页面，设备指纹 SDK 就绪");
+
+    // 拿到就自动关窗，不用用户自己去关
+    assert.deepEqual(browser.closed, [9333]);
+    assert.equal(status.browserClosed, true);
+
+    // 反代本来就在跑：不该重复启动它
+    assert.equal(status.proxyStarted, false);
+    assert.equal(status.proxyNote, "反代已经在运行");
+    assert.deepEqual(proxyProcess.calls.started, []);
+
+    // 模型自动进了「已配置的模型」，而且这一步不写密钥
+    assert.equal(status.providerId, DS_FREE_PROVIDER_ID);
+    assert.ok(status.providerNote.includes(DS_FREE_MODEL));
+    assert.equal(written.length, 1);
+    assert.equal(written[0]?.id, DS_FREE_PROVIDER_ID);
+    assert.equal(written[0]?.baseUrl, proxy.baseUrl);
+    assert.equal(written[0]?.defaultModel, DS_FREE_MODEL);
+    assert.equal(written[0]?.apiKey, undefined, "抓到就自动登记模型时还没密钥");
 
     const result = await service.apply({
       email: "someone@example.com",
@@ -89,7 +157,6 @@ test("接入助手：打开真实网页 → 自动拿到设备指纹 → 一键�
     assert.equal(result.providerId, DS_FREE_PROVIDER_ID);
     assert.equal(result.deviceIdAttached, true);
     assert.equal(result.accountAdded, true);
-    // 首次使用：管理密码是这一次设上的
     assert.equal(result.adminPasswordCreated, true);
     assert.equal(proxy.setupCount, 1);
     assert.equal(proxy.putCount, 1);
@@ -102,17 +169,83 @@ test("接入助手：打开真实网页 → 自动拿到设备指纹 → 一键�
     assert.equal(proxy.apiKeysWritten.length, 1);
     assert.equal(proxy.apiKeysWritten[0]?.description, "AI Companion（本机）");
 
-    // 我们这侧的 provider 也配好了；baseUrl 不带 /v1（代码自己会拼）
-    assert.equal(written.length, 1);
-    assert.equal(written[0]?.id, DS_FREE_PROVIDER_ID);
-    assert.equal(written[0]?.baseUrl, proxy.baseUrl);
-    assert.equal(written[0]?.defaultModel, "deepseek-default");
-    assert.equal(written[0]?.apiKey, proxy.apiKeysWritten[0]?.key);
+    // 一键写入把密钥补到同一条 provider 上；baseUrl 不带 /v1（代码自己会拼）
+    assert.equal(written.length, 2);
+    assert.equal(written[1]?.id, DS_FREE_PROVIDER_ID);
+    assert.equal(written[1]?.apiKey, proxy.apiKeysWritten[0]?.key);
 
     // 回给界面的只有掩码，永远不是完整密钥
-    assert.ok(!result.apiKeyMasked.includes(written[0]?.apiKey ?? ""));
-    assert.ok(result.apiKeyMasked.length < (written[0]?.apiKey ?? "").length);
+    assert.ok(!result.apiKeyMasked.includes(written[1]?.apiKey ?? ""));
+    assert.ok(result.apiKeyMasked.length < (written[1]?.apiKey ?? "").length);
     assert.ok(result.steps.length >= 4);
+  } finally {
+    await proxy.close();
+  }
+});
+
+test("接入助手：反代没在跑时，抓到设备指纹后自动替你启动它", async () => {
+  const proxy = await startMockDsFreeServer({ adminPassword: null });
+  proxy.setReachable(false);
+  const written: ProviderCall[] = [];
+  try {
+    const browser = fakeBrowserHarness();
+    // 我们"启动"反代之后，它就起来了——这正是真实情况
+    const proxyProcess = fakeProxyProcess({ binaryPath: "C:/tools/ds-free-api.exe", onStart: () => proxy.setReachable(true) });
+    const service = makeService({ proxyBaseUrl: proxy.baseUrl, browser, proxyProcess, written });
+
+    await service.start({ proxyBaseUrl: proxy.baseUrl });
+    await waitForCapture(service);
+    const status = await service.status();
+
+    assert.deepEqual(proxyProcess.calls.started, ["C:/tools/ds-free-api.exe"]);
+    assert.equal(status.proxyStarted, true);
+    assert.equal(status.proxyReachable, true);
+    assert.equal(status.binaryPath, "C:/tools/ds-free-api.exe");
+    assert.ok(status.proxyNote.includes("已自动启动反代"));
+    assert.equal(status.browserClosed, true, "启动反代不该影响自动关窗");
+    assert.equal(status.providerId, DS_FREE_PROVIDER_ID);
+    // 反代来源必须能传给界面（界面要标明这是别人的开源项目）
+    assert.equal(status.proxyProjectUrl, DS_FREE_PROJECT_URL);
+  } finally {
+    await proxy.close();
+  }
+});
+
+test("接入助手：找不到反代程序时如实说清楚去哪儿下，但已经拿到的东西照旧保留", async () => {
+  const proxy = await startMockDsFreeServer({ adminPassword: null });
+  proxy.setReachable(false);
+  const written: ProviderCall[] = [];
+  try {
+    const browser = fakeBrowserHarness();
+    const proxyProcess = fakeProxyProcess({ binaryPath: null });
+    const service = makeService({ proxyBaseUrl: proxy.baseUrl, browser, proxyProcess, written });
+
+    await service.start({ proxyBaseUrl: proxy.baseUrl });
+    await waitForCapture(service);
+    const status = await service.status();
+
+    assert.equal(status.deviceId, DEVICE_ID, "拿到的设备指纹不能因为反代没起来就丢");
+    assert.equal(status.browserClosed, true);
+    assert.deepEqual(proxyProcess.calls.started, []);
+    assert.equal(status.proxyStarted, null);
+    assert.ok(status.proxyNote.includes(DS_FREE_PROJECT_URL), "要告诉用户反代是哪个开源项目：" + status.proxyNote);
+    assert.equal(status.binaryPath, null);
+    // 模型照样先登记上，密钥等一键写入
+    assert.equal(status.providerId, DS_FREE_PROVIDER_ID);
+  } finally {
+    await proxy.close();
+  }
+});
+
+test("接入助手：填了反代路径就记下来，下次直接用", async () => {
+  const proxy = await startMockDsFreeServer({ adminPassword: null });
+  try {
+    const browser = fakeBrowserHarness();
+    const proxyProcess = fakeProxyProcess();
+    const service = makeService({ proxyBaseUrl: proxy.baseUrl, browser, proxyProcess, written: [] });
+    const status = await service.start({ proxyBaseUrl: proxy.baseUrl, binaryPath: "D:/tools/ds-free-api.exe" });
+    assert.deepEqual(proxyProcess.calls.remembered, ["D:/tools/ds-free-api.exe"]);
+    assert.equal(status.binaryPath, "D:/tools/ds-free-api.exe");
   } finally {
     await proxy.close();
   }
@@ -122,24 +255,25 @@ test("接入助手：已经有一条指向同一个反代的 provider 时，复�
   const proxy = await startMockDsFreeServer({ adminPassword: null });
   try {
     const browser = fakeBrowserHarness();
-    let captured = "";
+    const proxyProcess = fakeProxyProcess();
     const service = createDsFreeLoginService({
       logger: logger(),
       clock: createFakeClock(),
       dataDir: "C:/tmp/companion-test",
       // 组合根在这一步做「同地址复用」：这里模拟它已经选中了既有那条
-      upsertProvider: async (input) => { captured = input.id; return "openai-compatible-existing"; },
+      upsertProvider: async (call) => (call.id === DS_FREE_PROVIDER_ID ? "openai-compatible-existing" : call.id),
+      proxyProcess,
       findBrowserImpl: browser.findBrowserImpl,
       findFreePortImpl: browser.findFreePortImpl,
       launchBrowserImpl: browser.launchBrowserImpl,
       waitForPageTargetImpl: browser.waitForPageTargetImpl,
       cdpEvaluateImpl: browser.cdpEvaluateImpl,
+      closeBrowserImpl: browser.closeBrowserImpl,
     });
     await service.start({ proxyBaseUrl: proxy.baseUrl });
     await waitForCapture(service);
     const result = await service.apply({ email: "someone@example.com", deepseekPassword: "p", adminPassword: "admin-password" });
 
-    assert.equal(captured, DS_FREE_PROVIDER_ID, "请求的还是我们希望的那个 id");
     assert.equal(result.providerId, "openai-compatible-existing", "回给界面的必须是真正写进去的那条");
     assert.ok(result.steps.some((step) => step.includes("openai-compatible-existing")));
   } finally {
@@ -151,17 +285,8 @@ test("接入助手：反代已经设过管理密码时走登录，密码错就�
   const proxy = await startMockDsFreeServer({ adminPassword: "right-password" });
   try {
     const browser = fakeBrowserHarness();
-    const service = createDsFreeLoginService({
-      logger: logger(),
-      clock: createFakeClock(),
-      dataDir: "C:/tmp/companion-test",
-      upsertProvider: async () => DS_FREE_PROVIDER_ID,
-      findBrowserImpl: browser.findBrowserImpl,
-      findFreePortImpl: browser.findFreePortImpl,
-      launchBrowserImpl: browser.launchBrowserImpl,
-      waitForPageTargetImpl: browser.waitForPageTargetImpl,
-      cdpEvaluateImpl: browser.cdpEvaluateImpl,
-    });
+    const proxyProcess = fakeProxyProcess();
+    const service = makeService({ proxyBaseUrl: proxy.baseUrl, browser, proxyProcess, written: [] });
     await service.start({ proxyBaseUrl: proxy.baseUrl });
     await waitForCapture(service);
 
@@ -184,18 +309,9 @@ test("接入助手：设备指纹是唯一硬门槛，没拿到就不写反代",
   const proxy = await startMockDsFreeServer({ adminPassword: null });
   try {
     const browser = fakeBrowserHarness({ deviceId: null });
-    const written: string[] = [];
-    const service = createDsFreeLoginService({
-      logger: logger(),
-      clock: createFakeClock(),
-      dataDir: "C:/tmp/companion-test",
-      upsertProvider: async (input) => { written.push(input.id); return input.id; },
-      findBrowserImpl: browser.findBrowserImpl,
-      findFreePortImpl: browser.findFreePortImpl,
-      launchBrowserImpl: browser.launchBrowserImpl,
-      waitForPageTargetImpl: browser.waitForPageTargetImpl,
-      cdpEvaluateImpl: browser.cdpEvaluateImpl,
-    });
+    const proxyProcess = fakeProxyProcess();
+    const written: ProviderCall[] = [];
+    const service = makeService({ proxyBaseUrl: proxy.baseUrl, browser, proxyProcess, written });
     await service.start({ proxyBaseUrl: proxy.baseUrl });
 
     await assert.rejects(
@@ -203,13 +319,15 @@ test("接入助手：设备指纹是唯一硬门槛，没拿到就不写反代",
       /还没拿到设备指纹/,
     );
     assert.equal(proxy.putCount, 0);
-    assert.deepEqual(written, []);
+    assert.deepEqual(written, [], "没抓到指纹就不该动模型配置");
 
     // 停掉之后状态回到干净起点，不会留下半截状态
     service.stop();
     const status = await service.status();
     assert.equal(status.phase, "idle");
     assert.equal(status.deviceId, null);
+    assert.equal(status.providerId, null);
+    assert.equal(status.proxyNote, "");
   } finally {
     await proxy.close();
   }
@@ -219,19 +337,9 @@ test("接入助手：同一个账号再来一次不会重复加账号，密钥�
   const proxy = await startMockDsFreeServer({ adminPassword: null });
   try {
     const browser = fakeBrowserHarness();
-    const written: Array<{ apiKey: string }> = [];
-    const service = createDsFreeLoginService({
-      logger: logger(),
-      clock: createFakeClock(),
-      dataDir: "C:/tmp/companion-test",
-      upsertProvider: async (input) => { written.push(input); return input.id; },
-      randomKey: () => "aaaaaaaaaaaaaaaa",
-      findBrowserImpl: browser.findBrowserImpl,
-      findFreePortImpl: browser.findFreePortImpl,
-      launchBrowserImpl: browser.launchBrowserImpl,
-      waitForPageTargetImpl: browser.waitForPageTargetImpl,
-      cdpEvaluateImpl: browser.cdpEvaluateImpl,
-    });
+    const proxyProcess = fakeProxyProcess();
+    const written: ProviderCall[] = [];
+    const service = makeService({ proxyBaseUrl: proxy.baseUrl, browser, proxyProcess, written, randomKey: () => "aaaaaaaaaaaaaaaa" });
     await service.start({ proxyBaseUrl: proxy.baseUrl });
     await waitForCapture(service);
     const first = await service.apply({ email: "someone@example.com", deepseekPassword: "p", adminPassword: "admin-password" });
@@ -241,7 +349,9 @@ test("接入助手：同一个账号再来一次不会重复加账号，密钥�
     assert.equal(proxy.accountsWritten[0]?.password, "p2", "再写一次应该是更新密码");
     assert.equal(proxy.apiKeysWritten.length, 1, "本程序只该有一把密钥");
     assert.equal(first.apiKeyMasked, second.apiKeyMasked);
-    assert.equal(written[0]?.apiKey, written[1]?.apiKey);
+    const withKey = written.filter((call) => call.apiKey !== undefined);
+    assert.equal(withKey.length, 2);
+    assert.equal(withKey[0]?.apiKey, withKey[1]?.apiKey);
   } finally {
     await proxy.close();
   }
@@ -252,12 +362,13 @@ test("接入助手：没找到浏览器时给出可操作的提示，而不是�
     logger: logger(),
     clock: createFakeClock(),
     dataDir: "C:/tmp/companion-test",
-    upsertProvider: async () => DS_FREE_PROVIDER_ID,
+    upsertProvider: async (call) => call.id,
+    proxyProcess: fakeProxyProcess(),
     findBrowserImpl: () => null,
   });
   const status = await service.start({});
   assert.equal(status.phase, "error");
   assert.ok((status.lastError ?? "").includes("COMPANION_BROWSER_PATH"));
   assert.equal(status.deviceId, null);
+  assert.equal(status.providerId, null);
 });
-

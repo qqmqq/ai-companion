@@ -22,10 +22,12 @@ export function DsFreeLoginPanel(props: { onError: (message: string) => void; on
   const [email, setEmail] = useState("");
   const [deepseekPassword, setDeepseekPassword] = useState("");
   const [adminPassword, setAdminPassword] = useState("");
+  const [binaryPath, setBinaryPath] = useState("");
   const [busy, setBusy] = useState(false);
   const [result, setResult] = useState<DsFreeApplyResultDto | null>(null);
-  /** 浏览器窗口是外部进程，抓到了就停轮询；再点开始才会重启一轮 */
   const polling = useRef(false);
+  /** 已经在「抓完自动加模型」这一步通知过设置页，避免反复刷新 */
+  const notified = useRef(false);
 
   const refresh = useCallback(async () => {
     try {
@@ -41,6 +43,14 @@ export function DsFreeLoginPanel(props: { onError: (message: string) => void; on
   useEffect(() => {
     void refresh();
   }, [refresh]);
+
+  /** 抓完会顺手把模型加进「已配置的模型」：让设置页刷新一次，用户马上能看见 */
+  useEffect(() => {
+    if (status?.providerId === null || status?.providerId === undefined) return;
+    if (notified.current) return;
+    notified.current = true;
+    props.onApplied?.();
+  }, [status?.providerId, props]);
 
   useEffect(() => {
     if (status?.phase !== "waiting_login") {
@@ -74,8 +84,9 @@ export function DsFreeLoginPanel(props: { onError: (message: string) => void; on
   async function handleStart() {
     setBusy(true);
     setResult(null);
+    notified.current = false;
     try {
-      const next = await api.dsFreeStart();
+      const next = await api.dsFreeStart(binaryPath.trim().length === 0 ? {} : { binaryPath: binaryPath.trim() });
       setStatus(next);
     } catch (error) {
       props.onError((error as Error).message);
@@ -108,13 +119,20 @@ export function DsFreeLoginPanel(props: { onError: (message: string) => void; on
   const captured = status?.deviceId !== null && status?.deviceId !== undefined;
   const canApply =
     captured && email.trim().length > 0 && deepseekPassword.length > 0 && adminPassword.length >= 6 && !busy;
+  /** 反代没起来、也没找到程序时才需要用户告诉我们它在哪 */
+  const needsBinaryPath = captured && status?.proxyReachable !== true;
 
   return (
     <section className="panel">
       <h2>接入助手：打开真实网页，自动获取所需</h2>
       <p className="hint">
-        点下面的按钮会打开一个<strong>真实的浏览器窗口</strong>，进入 DeepSeek 登录页。你在那个窗口里正常登录一次，我们会自动读取反代登录必需的设备指纹
-        （device_id）。随后填好账号与反代管理密码点「一键写入」，DeepSeek 账号、API Key、这边的 provider 会一次配好。
+        点下面的按钮会打开一个<strong>真实的浏览器窗口</strong>进入 DeepSeek 登录页。页面一加载完，我们就自动读出反代登录必需的设备指纹
+        （device_id），然后<strong>自动关掉那个窗口</strong>、<strong>自动把反代跑起来</strong>、并<strong>把模型加进「已配置的模型」</strong>。
+      </p>
+      <p className="hint">
+        反代程序是别人的开源项目
+        <a href="https://github.com/NIyueeE/ds-free-api" target="_blank" rel="noreferrer"> ds-free-api </a>
+        （GPL-3.0），本项目不打包也不下载它：只在你机器上找到你已经下好的那个可执行文件并替你启动。
       </p>
 
       <ul className="cards">
@@ -128,9 +146,27 @@ export function DsFreeLoginPanel(props: { onError: (message: string) => void; on
           <div className="meta">
             <span>设备指纹：{captured ? "已获取" : "还没拿到"}</span>
             <span>浏览器：{status?.browser ?? "—"}</span>
-            <span>反代：{status === null ? "—" : status.proxyReachable === true ? "在运行" : status.proxyReachable === false ? "没连上" : "未知"}</span>
+            <span>登录页：{status?.browserClosed === true ? "已自动关闭" : status?.browserClosed === false ? "已不在" : "—"}</span>
           </div>
+          <div className="meta">
+            <span>
+              反代：
+              {status === null
+                ? "—"
+                : status.proxyReachable === true
+                  ? status.proxyStarted === true
+                    ? "已自动启动"
+                    : "在运行"
+                  : status.proxyReachable === false
+                    ? "没连上"
+                    : "未知"}
+            </span>
+            <span>模型：{status?.providerId ?? "还没加"}</span>
+          </div>
+          {status !== null && status.proxyNote.length > 0 && <p className={status.proxyReachable === true ? "hint" : "warn"}>{status.proxyNote}</p>}
+          {status !== null && status.providerNote.length > 0 && <p className="hint">{status.providerNote}</p>}
           {status !== null && <p className="hint">{status.pageHint}</p>}
+          {status?.preparing === true && <p className="hint">正在自动收尾：关掉浏览器窗口 → 启动反代 → 加入模型…</p>}
           {status?.lastError !== null && status?.lastError !== undefined && <p className="warn">{status.lastError}</p>}
         </li>
       </ul>
@@ -143,6 +179,17 @@ export function DsFreeLoginPanel(props: { onError: (message: string) => void; on
           停止等待
         </button>
       </div>
+
+      {needsBinaryPath && (
+        <label>
+          反代程序在哪（找不到才要填，填一次就记住）
+          <input
+            value={binaryPath}
+            onChange={(event) => setBinaryPath(event.target.value)}
+            placeholder="例如 D:\ds-free-api\ds-free-api.exe"
+          />
+        </label>
+      )}
 
       <div className="grid">
         <label>

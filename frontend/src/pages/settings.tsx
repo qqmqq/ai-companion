@@ -1,6 +1,5 @@
 import { useEffect, useRef, useState } from "react";
 import { api } from "../lib/api.ts";
-import { DS_FREE_PROXY_PRESET } from "../lib/provider-presets.ts";
 import { DsFreeLoginPanel } from "./ds-free-login.tsx";
 import type { ProviderDto, RoutingItemDto, UsageSummaryDto } from "../lib/types.ts";
 import {
@@ -278,20 +277,11 @@ export function SettingsPage(props: { onError: (message: string) => void }) {
       <p className="hint">API Key 只保存在本机加密存储中，界面永远不会显示明文。</p>
 
       <p className="hint">
-        想省钱可以把请求转到自建的 DeepSeek 网页反代（例如
+        想省钱可以把请求转到自建的 DeepSeek 网页反代 —— 那是开源项目
         <a href="https://github.com/NIyueeE/ds-free-api" target="_blank" rel="noreferrer"> ds-free-api </a>
-        ，本机默认 <code>http://127.0.0.1:22217</code>）。不会配也没关系：用下面的「接入助手」一次点完；已经自己在管理面板建过 API Key 的话，也可以点预设手动填。
+        （GPL-3.0，本机默认 <code>http://127.0.0.1:22217</code>），本项目只调用它的接口。
+        下面那个「接入助手」会开真实网页自动取到所需信息、自动启动它、并把模型加进「已配置的模型」，不用你手填任何连接参数。
       </p>
-      <div className="row">
-        <button
-          className="ghost"
-          onClick={() =>
-            setForm({ ...form, ...DS_FREE_PROXY_PRESET })
-          }
-        >
-          预设：DeepSeek 网页反代（127.0.0.1:22217）
-        </button>
-      </div>
 
       <div className="grid">
         <label>

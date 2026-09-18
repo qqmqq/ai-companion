@@ -60,25 +60,34 @@ docker compose -f docker/docker-compose.yaml up -d
 
 「模型设置」页 → **接入助手：打开真实网页，自动获取所需**：
 
-1. 点 **打开登录页并自动获取**：本程序会在你的机器上开一个**真实的浏览器窗口**（独立 profile，放在 `data/ds-free-browser/`），
+1. 点 **打开登录页并自动获取**：本程序在你的机器上开一个**真实的浏览器窗口**（独立 profile，放在 `data/ds-free-browser/`），
    打开 `https://chat.deepseek.com/sign_in`，并通过 Chrome DevTools 协议读取页面上的**设备指纹**（数美 `SMSdk.getDeviceId()`，
    取不到就退到 localStorage 里像设备号的键）。这个设备指纹就是 ds-free-api 登录必需的 `device_id`。
-2. 在那个窗口里正常登录一次 DeepSeek（页面加载完就够；登录只是让指纹更稳）。
+2. 拿到设备指纹后**自动收尾**，不用你再动手：
+   - **自动关掉那个浏览器窗口**（走 CDP 的 `Browser.close`，不是粗暴 kill）；
+   - **自动把反代跑起来**（没在跑的时候）：在 `data/ds-free-api/`、环境变量 `COMPANION_DS_FREE_BIN`、上次你填的路径、
+     以及常见下载位置里找那个可执行文件；找到就替你启动，并等它 `/health` 就绪（最多 20 秒）。
+     找不到会如实告诉你去哪儿下（就是上面那个开源项目），面板上会多出一栏让你填一次路径，填了就记住；
+   - **自动把模型加进「已配置的模型」**：建好 provider `ds-free-proxy`（`baseUrl = http://127.0.0.1:22217`，模型 `deepseek-default`）。
+     这一步先不写密钥（那时还不知道），密钥在一键写入时补上。
 3. 回到本页填三样：DeepSeek 账号（邮箱）、DeepSeek 密码、**反代管理密码**（`/admin` 的密码；没设过就用你填的这个设上）。
 4. 点 **一键写入并配好 provider**，本程序会：
    - 登录（或首次设置）反代管理面板；
    - 把账号（邮箱 + 密码 + `device_id`）写进反代账号池；
    - 在反代里创建一把本程序专用的 API Key（描述为「AI Companion（本机）」）；
    - 写入反代配置并让它热重载；
-   - 在我们这侧建好 provider `ds-free-proxy`（`baseUrl = http://127.0.0.1:22217`，模型 `deepseek-default`），密钥只进本机加密库。
+   - 把密钥补到那条 provider 上（密钥只进本机加密库，界面只回掩码）。
 5. 完成后去「任务用哪个模型」把要用的任务指到它。
+
+> 反代程序本身是开源项目 [NIyueeE/ds-free-api](https://github.com/NIyueeE/ds-free-api)（GPL-3.0）。
+> 本项目**不打包、不下载、不修改**它，只在你机器上找到它并调用它的 HTTP 接口；界面上也写明了这一点。
 
 接口（都是本机 HTTP）：
 
 | 方法 | 路径 | 作用 |
 | --- | --- | --- |
-| POST | `/api/integrations/ds-free/start` | 开真实浏览器并开始自动获取（幂等：已在等就返回当前状态） |
-| GET | `/api/integrations/ds-free/status` | 当前阶段、是否已拿到设备指纹、反代在不在；**不含任何密钥字段** |
+| POST | `/api/integrations/ds-free/start` | 开真实浏览器并开始自动获取（幂等：已在等就返回当前状态）；可带 `binaryPath` 告诉它反代程序在哪 |
+| GET | `/api/integrations/ds-free/status` | 当前阶段、设备指纹、窗口有没有自动关、反代是不是我们起的、模型加没加；**不含任何密钥字段** |
 | POST | `/api/integrations/ds-free/stop` | 停止等待并清空本轮的抓取状态 |
 | POST | `/api/integrations/ds-free/apply` | 一键写入（账号池 + API Key + provider），只回掩码 |
 
@@ -86,8 +95,9 @@ docker compose -f docker/docker-compose.yaml up -d
 
 - 密码只在这一次请求里使用，**不落库、不进日志**；回给界面的只有掩码（`sk-dsfree-01…cdef` 这种）；
 - 设备指纹是唯一硬门槛：没拿到就不允许写入，并明确提示「先点打开登录页并自动获取」；
-- 找不到 Chrome/Edge 时如实报错，可以用环境变量 `COMPANION_BROWSER_PATH` 指定浏览器可执行文件；
-- 浏览器 profile 独立于你日常用的浏览器，关掉那个窗口不影响这次写入。
+- 找不到 Chrome/Edge 时如实报错，可以用环境变量 `COMPANION_BROWSER_PATH` 指定浏览器可执行文件（**指定了就只用它**，不会再偷偷开系统里的 Chrome）；
+- 浏览器 profile 独立于你日常用的浏览器，窗口关掉不影响已经拿到的设备指纹；
+- 反代程序的**工作目录固定在我们的数据目录**里（`data/ds-free-api/run/`），它自己的 `config.toml` 与日志都落在那里，不会写进代码仓库。
 
 ### 已验证到什么程度
 
@@ -96,12 +106,15 @@ docker compose -f docker/docker-compose.yaml up -d
 | 抓取逻辑（页面表达式 → 设备指纹 → 状态提示） | ✅ 单元用例：空值/占位值/超长值一律当没拿到，未知状态不显示 `undefined` |
 | 一键写入全链路 | ✅ 集成用例：对**反代管理 API 的测试替身**跑完整流程（首次设密码 / 密码错 / 账号已存在 / 密钥复用 / 没指纹不许写），断言写进反代的账号含 `device_id`、密钥只有一把、provider 配置正确 |
 | 接口层 | ✅ 用例：状态接口不含 `password/apiKey/token` 任何字段；没指纹时一键写入返回中文可操作提示；管理密码过短在入口拦截 |
-| 界面 | ✅ 用例：阶段文案中文化、未知阶段不显示 `undefined`、密码提交后立刻清空且页面不回显 |
+| 界面 | ✅ 用例：阶段文案中文化、未知阶段不显示 `undefined`、密码提交后立刻清空且页面不回显；面板上标明反代来源是开源项目并给出链接 |
+| 抓完自动收尾（关窗 → 起反代 → 加模型） | ✅ **真机实测**：调一次 `/start`，真实 Chrome 打开登录页 → 设备指纹拿到 → 窗口自动关闭（系统里已无带调试端口的 Chrome 进程）→ 反代被自动拉起（22217 开始 LISTEN，`config.toml` 落在 `data/ds-free-api/run/`）→ `ds-free-proxy` 出现在 `/api/providers` 里（模型 `deepseek-default`） |
 | 真实页面抓取（本机 Chrome 打真实 DeepSeek 登录页） | ✅ **实测**：本机 Chrome 无头启动 → CDP 读 `https://chat.deepseek.com/sign_in` → `hasSmsdk: true`，`SMSdk.getDeviceId()` 返回 88 字符指纹；同一页面的 localStorage 里也能看到 `deepseek-device-id:chat`、`smidV2` 这类键 |
 | 反代管理协议（对 v0.2.11 真实进程） | ✅ **实测**：`/health` 可达；首次 `ensureAdminToken` 走 403→`/admin/api/setup` 设上密码；`GET/PUT /admin/api/config` 结构确认为 `server / ds_core / proxy / admin / api_keys`；写进去的账号（含 `device_id`）与 API Key 都持久化成功，重复加同一邮箱不会变成两条 |
 | 生成的 Key 真的能用 | ✅ **实测**：用上面写进去的 Key 请求反代 `/v1/models` → 200，返回 `deepseek-default` |
 | 真实 DeepSeek 账号走完一轮对话 | ⏳ **还没跑**：需要你填自己的 DeepSeek 邮箱与密码（我不该也不会有你的账号）；填完点一次「一键写入」即可 |
 | 界面上真的点过按钮（真窗口的可视化确认） | ⏳ 组件级用例 + Vite 开发服务器实编译通过；本机浏览器里的目视确认留给你 |
+
+> 注：上面「真机实测」是直接调接口跑的流程（等价于点按钮），不是我替你在浏览器里点了一遍。
 ## 4. 要说清的风险（别只看省钱）
 
 - **非官方**：它依赖 DeepSeek 网页端的行为，对方改版就可能失效；本项目与它没有任何关系；
@@ -127,5 +140,6 @@ docker compose -f docker/docker-compose.yaml up -d
 | WIRING_VERIFIED | VERIFIED —— 真机：provider → 反代 `/v1/models` 打通，上游 401 如实上报 |
 | REAL_PAGE_CAPTURE | VERIFIED —— 本机 Chrome 打真实登录页，设备指纹成功取出 |
 | ADMIN_PROTOCOL | VERIFIED —— 对真实 v0.2.11 进程完成「首次设密码 → 写账号+Key → 读回 → 生成的 Key 能调 /v1/models」 |
+| AUTO_FINISH | VERIFIED —— 抓完自动关窗、自动拉起反代、自动把模型加进「已配置的模型」（真机实测） |
 | END_TO_END_PENDING | PENDING —— 你填自己的 DeepSeek 账号后点一次「一键写入」即可闭环 |
 | NO_CODE_COPIED | VERIFIED —— 只调用 HTTP 接口，未复制/链接 GPL-3.0 代码 |

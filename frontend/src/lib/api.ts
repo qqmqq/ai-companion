@@ -280,7 +280,7 @@ export const api = {
 
   /** 接入助手：开真实网页抓 device_id，再一键把账号/密钥/provider 都配好（密码只在一次请求里用） */
   dsFreeStatus: () => request<DsFreeHelperStatusDto>("/api/integrations/ds-free/status"),
-  dsFreeStart: (input: { proxyBaseUrl?: string } = {}) =>
+  dsFreeStart: (input: { proxyBaseUrl?: string; binaryPath?: string } = {}) =>
     request<DsFreeHelperStatusDto>("/api/integrations/ds-free/start", { method: "POST", body: JSON.stringify(input) }),
   dsFreeStop: () => request<DsFreeHelperStatusDto>("/api/integrations/ds-free/stop", { method: "POST" }),
   dsFreeApply: (input: { email: string; deepseekPassword: string; adminPassword: string; proxyBaseUrl?: string }) =>
