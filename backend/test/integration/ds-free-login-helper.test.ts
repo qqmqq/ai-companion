@@ -54,7 +54,7 @@ test("接入助手：打开真实网页 → 自动拿到设备指纹 → 一键�
       logger: logger(),
       clock: createFakeClock(),
       dataDir: "C:/tmp/companion-test",
-      upsertProvider: async (input) => { written.push(input); },
+      upsertProvider: async (input) => { written.push(input); return input.id; },
       randomKey: () => "0123456789abcdef",
       findBrowserImpl: browser.findBrowserImpl,
       findFreePortImpl: browser.findFreePortImpl,
@@ -118,6 +118,35 @@ test("接入助手：打开真实网页 → 自动拿到设备指纹 → 一键�
   }
 });
 
+test("接入助手：已经有一条指向同一个反代的 provider 时，复用它而不是又建一条", async () => {
+  const proxy = await startMockDsFreeServer({ adminPassword: null });
+  try {
+    const browser = fakeBrowserHarness();
+    let captured = "";
+    const service = createDsFreeLoginService({
+      logger: logger(),
+      clock: createFakeClock(),
+      dataDir: "C:/tmp/companion-test",
+      // 组合根在这一步做「同地址复用」：这里模拟它已经选中了既有那条
+      upsertProvider: async (input) => { captured = input.id; return "openai-compatible-existing"; },
+      findBrowserImpl: browser.findBrowserImpl,
+      findFreePortImpl: browser.findFreePortImpl,
+      launchBrowserImpl: browser.launchBrowserImpl,
+      waitForPageTargetImpl: browser.waitForPageTargetImpl,
+      cdpEvaluateImpl: browser.cdpEvaluateImpl,
+    });
+    await service.start({ proxyBaseUrl: proxy.baseUrl });
+    await waitForCapture(service);
+    const result = await service.apply({ email: "someone@example.com", deepseekPassword: "p", adminPassword: "admin-password" });
+
+    assert.equal(captured, DS_FREE_PROVIDER_ID, "请求的还是我们希望的那个 id");
+    assert.equal(result.providerId, "openai-compatible-existing", "回给界面的必须是真正写进去的那条");
+    assert.ok(result.steps.some((step) => step.includes("openai-compatible-existing")));
+  } finally {
+    await proxy.close();
+  }
+});
+
 test("接入助手：反代已经设过管理密码时走登录，密码错就如实报错", async () => {
   const proxy = await startMockDsFreeServer({ adminPassword: "right-password" });
   try {
@@ -126,7 +155,7 @@ test("接入助手：反代已经设过管理密码时走登录，密码错就�
       logger: logger(),
       clock: createFakeClock(),
       dataDir: "C:/tmp/companion-test",
-      upsertProvider: async () => {},
+      upsertProvider: async () => DS_FREE_PROVIDER_ID,
       findBrowserImpl: browser.findBrowserImpl,
       findFreePortImpl: browser.findFreePortImpl,
       launchBrowserImpl: browser.launchBrowserImpl,
@@ -160,7 +189,7 @@ test("接入助手：设备指纹是唯一硬门槛，没拿到就不写反代",
       logger: logger(),
       clock: createFakeClock(),
       dataDir: "C:/tmp/companion-test",
-      upsertProvider: async (input) => { written.push(input.id); },
+      upsertProvider: async (input) => { written.push(input.id); return input.id; },
       findBrowserImpl: browser.findBrowserImpl,
       findFreePortImpl: browser.findFreePortImpl,
       launchBrowserImpl: browser.launchBrowserImpl,
@@ -195,7 +224,7 @@ test("接入助手：同一个账号再来一次不会重复加账号，密钥�
       logger: logger(),
       clock: createFakeClock(),
       dataDir: "C:/tmp/companion-test",
-      upsertProvider: async (input) => { written.push(input); },
+      upsertProvider: async (input) => { written.push(input); return input.id; },
       randomKey: () => "aaaaaaaaaaaaaaaa",
       findBrowserImpl: browser.findBrowserImpl,
       findFreePortImpl: browser.findFreePortImpl,
@@ -223,7 +252,7 @@ test("接入助手：没找到浏览器时给出可操作的提示，而不是�
     logger: logger(),
     clock: createFakeClock(),
     dataDir: "C:/tmp/companion-test",
-    upsertProvider: async () => {},
+    upsertProvider: async () => DS_FREE_PROVIDER_ID,
     findBrowserImpl: () => null,
   });
   const status = await service.start({});

@@ -50,8 +50,8 @@ export interface DsFreeLoginServiceDeps {
   clock: Clock;
   dataDir: string;
   fetchImpl?: typeof fetch;
-  /** 把这侧的 provider 落库（写配置 + 密钥 + 重载），由组合根注入 */
-  upsertProvider: (input: { id: string; displayName: string; baseUrl: string; defaultModel: string; apiKey: string }) => Promise<void>;
+  /** 把这侧的 provider 落库（写配置 + 密钥 + 重载），由组合根注入；返回真正写入的那条记录 id */
+  upsertProvider: (input: { id: string; displayName: string; baseUrl: string; defaultModel: string; apiKey: string }) => Promise<string>;
   /** 测试注入 */
   findBrowserImpl?: () => BrowserCandidate | null;
   launchBrowserImpl?: (input: { exePath: string; url: string; profileDir: string; debugPort: number; logger: Logger }) => void;
@@ -59,6 +59,23 @@ export interface DsFreeLoginServiceDeps {
   waitForPageTargetImpl?: (input: { debugPort: number; fetchImpl?: typeof fetch; timeoutMs?: number; intervalMs?: number }) => Promise<CdpTarget | null>;
   cdpEvaluateImpl?: (input: { webSocketDebuggerUrl: string; expression: string }) => Promise<unknown>;
   randomKey?: () => string;
+}
+
+/**
+ * 该写哪一条 provider：已经有指向同一个反代的，就用它。
+ * 否则「先手动加了预设、再点一键写入」会留下两条一样的记录（其中一条没密钥）。
+ */
+export function pickProviderTarget(
+  existing: Array<{ id: string; kind: string; baseUrl: string }>,
+  input: { id: string; baseUrl: string },
+): string {
+  const exact = existing.find((provider) => provider.id === input.id);
+  if (exact !== undefined) return exact.id;
+  const normalized = input.baseUrl.trim().replace(/[/]+$/, "");
+  const sameProxy = existing.find(
+    (provider) => provider.kind === "openai-compatible" && provider.baseUrl.trim().replace(/[/]+$/, "") === normalized,
+  );
+  return sameProxy?.id ?? input.id;
 }
 
 /** 默认随机源：够用即止，密钥只在本机反代用 */
@@ -232,19 +249,19 @@ export function createDsFreeLoginService(deps: DsFreeLoginServiceDeps) {
       await admin.putConfig(token, withKey.config);
       steps.push("已写入反代配置并热重载");
 
-      await deps.upsertProvider({
+      const providerId = await deps.upsertProvider({
         id: DS_FREE_PROVIDER_ID,
         displayName: "DeepSeek 网页反代（本机）",
         baseUrl,
         defaultModel: "deepseek-default",
         apiKey,
       });
-      steps.push("已在「模型设置」里配置好 provider（下一步把任务指向它即可）");
+      steps.push("已在「模型设置」里配置好 provider：" + providerId + "（下一步把任务指向它即可）");
       deps.logger.info("ds-free onboarding finished", { step: "dsfree.apply", status: "completed", accountAdded: withAccount.added });
 
       return {
         ok: true,
-        providerId: DS_FREE_PROVIDER_ID,
+        providerId,
         proxyBaseUrl: baseUrl,
         apiKeyMasked: maskKey(apiKey),
         accountAdded: withAccount.added,

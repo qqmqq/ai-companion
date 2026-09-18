@@ -35,7 +35,7 @@ import { createCharacterService } from "../core/services/character-service.ts";
 import { createCharacterStudioService } from "../core/services/character-studio-service.ts";
 import { createReminderComposer } from "../core/services/reminder-composer.ts";
 import { createChatCharacterSwitch } from "../core/services/chat-character-switch.ts";
-import { createDsFreeLoginService } from "../integrations/ds-free/service.ts";
+import { createDsFreeLoginService, pickProviderTarget } from "../integrations/ds-free/service.ts";
 import { createConversationService } from "../core/services/conversation-service.ts";
 import { createSummaryService } from "../core/services/summary-service.ts";
 import { createMessagingPipeline } from "../core/services/messaging-pipeline.ts";
@@ -739,29 +739,32 @@ export async function createContainer(options: CreateContainerOptions): Promise<
     dataDir: config.dataDir,
     upsertProvider: async (input) => {
       const at = clock.nowIso();
-      const existing = providerConfig.get(input.id);
+      // 已经有一条指向同一个反代的 provider（例如先手动加过预设）就复用它，别造出重复记录
+      const targetId = pickProviderTarget(providerConfig.list(), { id: input.id, baseUrl: input.baseUrl });
+      const existing = providerConfig.get(targetId);
       providerConfig.upsert({
-        id: input.id,
+        id: targetId,
         kind: "openai-compatible",
         displayName: input.displayName,
         baseUrl: input.baseUrl,
         defaultModel: input.defaultModel,
-        credentialRef: input.id,
+        credentialRef: targetId,
         requiresCredential: true,
         timeoutMs: existing?.timeoutMs ?? 60_000,
         enabled: true,
         createdAt: existing?.createdAt ?? at,
         updatedAt: at,
       });
-      await credentials.putSecret(input.id, { apiKey: input.apiKey });
+      await credentials.putSecret(targetId, { apiKey: input.apiKey });
       await reloadProviders();
       audit.append({
         actor: "user",
         action: "provider.upsert",
         targetType: "provider",
-        targetId: input.id,
+        targetId,
         detail: { kind: "openai-compatible", baseUrl: input.baseUrl, source: "ds-free-login-helper" },
       });
+      return targetId;
     },
     ...(options.fetchImpl === undefined ? {} : { fetchImpl: options.fetchImpl }),
   });
