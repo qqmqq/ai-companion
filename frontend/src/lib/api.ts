@@ -283,7 +283,7 @@ export const api = {
   dsFreeStart: (input: { proxyBaseUrl?: string; binaryPath?: string } = {}) =>
     request<DsFreeHelperStatusDto>("/api/integrations/ds-free/start", { method: "POST", body: JSON.stringify(input) }),
   dsFreeStop: () => request<DsFreeHelperStatusDto>("/api/integrations/ds-free/stop", { method: "POST" }),
-  dsFreeApply: (input: { email: string; deepseekPassword: string; adminPassword: string; proxyBaseUrl?: string }) =>
+  dsFreeApply: (input: { email: string; deepseekPassword: string; adminPassword?: string; proxyBaseUrl?: string }) =>
     request<DsFreeApplyResultDto>("/api/integrations/ds-free/apply", { method: "POST", body: JSON.stringify(input) }),
 
   subscribeEvents: (onEvent: (event: StreamEvent) => void): (() => void) => {

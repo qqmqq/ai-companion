@@ -11,7 +11,8 @@ import { parseOrThrow } from "../validation.ts";
 const ApplySchema = z.object({
   email: z.string().min(1).max(200),
   deepseekPassword: z.string().min(1).max(200),
-  adminPassword: z.string().min(6).max(200),
+  /** 存过一次之后可以留空：留空就用本机记着的那把 */
+  adminPassword: z.string().min(6).max(200).optional(),
   proxyBaseUrl: z.string().max(300).optional(),
 });
 
@@ -44,7 +45,7 @@ export function registerIntegrationRoutes(app: FastifyInstance, container: Conta
     return await container.dsFreeLogin.apply({
       email: body.email,
       deepseekPassword: body.deepseekPassword,
-      adminPassword: body.adminPassword,
+      ...(body.adminPassword === undefined ? {} : { adminPassword: body.adminPassword }),
       ...(body.proxyBaseUrl === undefined ? {} : { proxyBaseUrl: body.proxyBaseUrl }),
     });
   });

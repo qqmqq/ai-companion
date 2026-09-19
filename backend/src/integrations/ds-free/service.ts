@@ -63,6 +63,8 @@ export interface DsFreeHelperStatus {
   /** 自动加进「已配置的模型」的那条 provider */
   providerId: string | null;
   providerNote: string;
+  /** 反代管理密码是否已经存在本机（存过就不用再填） */
+  adminPasswordSaved: boolean;
   lastError: string | null;
 }
 
@@ -89,6 +91,15 @@ export interface DsFreeLoginServiceDeps {
   }) => Promise<string>;
   /** 反代进程管理；不注入就用默认实现 */
   proxyProcess?: DsFreeProxyProcessPort;
+  /**
+   * 反代管理密码的本地保管（组合根接到本机加密库）。
+   * 用一次就该记住：反代一旦设过管理密码，后面每次写入都要用它登录，
+   * 不该让用户一遍遍重填。密码只进加密库，接口只回"有没有存过"。
+   */
+  adminPasswordStore?: {
+    get(): Promise<string | null>;
+    put(password: string): Promise<void>;
+  };
   /** 测试注入 */
   findBrowserImpl?: () => BrowserCandidate | null;
   launchBrowserImpl?: (input: { exePath: string; url: string; profileDir: string; debugPort: number; logger: Logger }) => void;
@@ -161,6 +172,7 @@ export function createDsFreeLoginService(deps: DsFreeLoginServiceDeps) {
   let binaryPath: string | null = null;
   let providerId: string | null = null;
   let providerNote = "";
+  let adminPasswordSaved = false;
   let polling = false;
 
   function client(baseUrl: string): DsFreeAdminClient {
@@ -313,6 +325,7 @@ export function createDsFreeLoginService(deps: DsFreeLoginServiceDeps) {
       binaryPath,
       providerId,
       providerNote,
+      adminPasswordSaved,
       lastError,
     };
   }
@@ -356,6 +369,7 @@ export function createDsFreeLoginService(deps: DsFreeLoginServiceDeps) {
 
     async status(): Promise<DsFreeHelperStatus> {
       proxyReachable = await client(proxyBaseUrl).reachable();
+      adminPasswordSaved = (await deps.adminPasswordStore?.get()) !== null;
       return snapshot();
     },
 
@@ -379,7 +393,8 @@ export function createDsFreeLoginService(deps: DsFreeLoginServiceDeps) {
     async apply(input: {
       email: string;
       deepseekPassword: string;
-      adminPassword: string;
+      /** 反代管理密码：存过一次之后可以留空（留空就用本机记着的那把） */
+      adminPassword?: string;
       proxyBaseUrl?: string;
     }): Promise<{
       ok: true;
@@ -400,7 +415,15 @@ export function createDsFreeLoginService(deps: DsFreeLoginServiceDeps) {
       }
       if (input.email.trim().length === 0) throw new DomainError("invalid_input", "请填 DeepSeek 账号（邮箱或手机号）");
       if (input.deepseekPassword.length === 0) throw new DomainError("invalid_input", "请填 DeepSeek 账号密码");
-      if (input.adminPassword.length < 6) throw new DomainError("invalid_input", "反代管理密码至少 6 位（没设置过就会用它设上）");
+      const providedPassword = input.adminPassword ?? "";
+      const storedPassword = (await deps.adminPasswordStore?.get()) ?? null;
+      const adminPassword = providedPassword.length > 0 ? providedPassword : (storedPassword ?? "");
+      if (adminPassword.length === 0) {
+        throw new DomainError("invalid_input", "请填反代管理密码（ds-free-api 管理面板的密码；没设置过就会用它设上）");
+      }
+      if (providedPassword.length > 0 && providedPassword.length < 6) {
+        throw new DomainError("invalid_input", "反代管理密码至少 6 位（没设置过就会用它设上）");
+      }
 
       const admin = client(baseUrl);
       if (!(await admin.reachable())) {
@@ -414,12 +437,18 @@ export function createDsFreeLoginService(deps: DsFreeLoginServiceDeps) {
       let token: string;
       let adminPasswordCreated = false;
       try {
-        const auth = await admin.ensureAdminToken(input.adminPassword);
+        const auth = await admin.ensureAdminToken(adminPassword);
         token = auth.token;
         adminPasswordCreated = auth.createdPassword;
         steps.push(adminPasswordCreated ? "已用你给的密码设置反代管理密码（首次）" : "已登录反代管理面板");
       } catch (error) {
         throw new DomainError("invalid_input", "反代管理登录失败：" + (error as Error).message);
+      }
+      // 登录成功才记：错的密码一律不落库
+      if (deps.adminPasswordStore !== undefined && adminPassword !== storedPassword) {
+        await deps.adminPasswordStore.put(adminPassword);
+        adminPasswordSaved = true;
+        steps.push("已把反代管理密码记在本机加密库里（下次不用再填，界面也不会再问）");
       }
 
       const current = await admin.getConfig(token);

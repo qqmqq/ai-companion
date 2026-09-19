@@ -22,6 +22,8 @@ export function DsFreeLoginPanel(props: { onError: (message: string) => void; on
   const [email, setEmail] = useState("");
   const [deepseekPassword, setDeepseekPassword] = useState("");
   const [adminPassword, setAdminPassword] = useState("");
+  /** 已经存过管理密码就不显示这一栏；用户主动点「换一个」才露出来 */
+  const [wantNewAdminPassword, setWantNewAdminPassword] = useState(false);
   const [binaryPath, setBinaryPath] = useState("");
   const [busy, setBusy] = useState(false);
   const [result, setResult] = useState<DsFreeApplyResultDto | null>(null);
@@ -109,7 +111,7 @@ export function DsFreeLoginPanel(props: { onError: (message: string) => void; on
       const applied = await api.dsFreeApply({
         email: email.trim(),
         deepseekPassword,
-        adminPassword,
+        ...(showAdminPasswordField && adminPassword.length > 0 ? { adminPassword } : {}),
       });
       setResult(applied);
       // 密码用完即弃：立刻从界面状态里清掉，不留在输入框里
@@ -125,8 +127,11 @@ export function DsFreeLoginPanel(props: { onError: (message: string) => void; on
   }
 
   const captured = status?.deviceId !== null && status?.deviceId !== undefined;
-  const canApply =
-    captured && email.trim().length > 0 && deepseekPassword.length > 0 && adminPassword.length >= 6 && !busy;
+  /** 反代管理密码：已经存在本机就不问了（用户点「换一个」才会重新出现） */
+  const adminPasswordSaved = status?.adminPasswordSaved === true;
+  const showAdminPasswordField = !adminPasswordSaved || wantNewAdminPassword;
+  const adminPasswordReady = !showAdminPasswordField || adminPassword.length >= 6;
+  const canApply = captured && email.trim().length > 0 && deepseekPassword.length > 0 && adminPasswordReady && !busy;
   /** 反代没起来、也没找到程序时才需要用户告诉我们它在哪 */
   const needsBinaryPath = captured && status?.proxyReachable !== true;
 
@@ -214,21 +219,31 @@ export function DsFreeLoginPanel(props: { onError: (message: string) => void; on
             autoComplete="off"
           />
         </label>
-        <label>
-          反代管理密码
-          <input
-            type="password"
-            value={adminPassword}
-            onChange={(event) => setAdminPassword(event.target.value)}
-            placeholder="ds-free-api 管理面板的密码（首次会自动设上）"
-            autoComplete="off"
-          />
-        </label>
+        {showAdminPasswordField && (
+          <label>
+            反代管理密码
+            <input
+              type="password"
+              value={adminPassword}
+              onChange={(event) => setAdminPassword(event.target.value)}
+              placeholder="ds-free-api 管理面板的密码（首次会自动设上）"
+              autoComplete="off"
+            />
+          </label>
+        )}
       </div>
       <button disabled={!canApply} onClick={() => void handleApply()}>
         {busy ? "正在写入…" : "一键写入并配好 provider"}
       </button>
       {!captured && <p className="hint">先点上面的按钮拿到设备指纹，这里的写入才会生效。</p>}
+      {captured && !showAdminPasswordField && (
+        <p className="hint">
+          反代管理密码已经记在本机加密库里了，这里不用再填。
+          <button className="ghost" onClick={() => setWantNewAdminPassword(true)}>
+            换一个管理密码
+          </button>
+        </p>
+      )}
 
       {result !== null && (
         <div>

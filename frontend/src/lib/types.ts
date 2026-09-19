@@ -353,6 +353,8 @@ export interface DsFreeHelperStatusDto {
   /** 自动加进「已配置的模型」的那条 provider */
   providerId: string | null;
   providerNote: string;
+  /** 反代管理密码是否已经存在本机（存过就不用再填） */
+  adminPasswordSaved: boolean;
   lastError: string | null;
 }
 

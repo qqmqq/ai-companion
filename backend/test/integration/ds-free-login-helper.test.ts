@@ -79,12 +79,25 @@ async function waitForCapture(service: { status: () => Promise<{ phase: string; 
   }
 }
 
+/** 本机加密库里记着的反代管理密码（用一次就该记住，不该反复问） */
+function fakeAdminPasswordStore(initial: string | null = null) {
+  let stored = initial;
+  return {
+    get: async () => stored,
+    put: async (password: string) => {
+      stored = password;
+    },
+    current: () => stored,
+  };
+}
+
 function makeService(input: {
   proxyBaseUrl: string;
   browser: ReturnType<typeof fakeBrowserHarness>;
   proxyProcess: ReturnType<typeof fakeProxyProcess>;
   written: ProviderCall[];
   randomKey?: () => string;
+  adminPasswordStore?: ReturnType<typeof fakeAdminPasswordStore>;
 }) {
   return createDsFreeLoginService({
     logger: logger(),
@@ -95,6 +108,7 @@ function makeService(input: {
       return call.id;
     },
     proxyProcess: input.proxyProcess,
+    adminPasswordStore: input.adminPasswordStore ?? fakeAdminPasswordStore(),
     findBrowserImpl: input.browser.findBrowserImpl,
     findFreePortImpl: input.browser.findFreePortImpl,
     launchBrowserImpl: input.browser.launchBrowserImpl,
@@ -184,6 +198,71 @@ test("接入助手：打开真实网页 → 自动拿到设备指纹 → 自动�
     assert.ok(!result.apiKeyMasked.includes(written[1]?.apiKey ?? ""));
     assert.ok(result.apiKeyMasked.length < (written[1]?.apiKey ?? "").length);
     assert.ok(result.steps.length >= 4);
+  } finally {
+    await proxy.close();
+  }
+});
+
+test("接入助手：管理密码用过一次就记住，之后不用再填（状态里只回「存过没有」）", async () => {
+  const proxy = await startMockDsFreeServer({ adminPassword: null });
+  try {
+    const browser = fakeBrowserHarness();
+    const store = fakeAdminPasswordStore();
+    const service = makeService({ proxyBaseUrl: proxy.baseUrl, browser, proxyProcess: fakeProxyProcess(), written: [], adminPasswordStore: store });
+    await service.start({ proxyBaseUrl: proxy.baseUrl });
+    await waitForCapture(service);
+
+    const before = await service.status();
+    assert.equal(before.adminPasswordSaved, false);
+
+    await service.apply({ email: "someone@example.com", deepseekPassword: "p", adminPassword: "admin-password" });
+    assert.equal(store.current(), "admin-password", "登录成功了才记下来");
+
+    const after = await service.status();
+    assert.equal(after.adminPasswordSaved, true);
+    assert.equal(JSON.stringify(after).includes("admin-password"), false, "状态里绝不能回显密码本身");
+
+    // 第二次：不再传管理密码，用本机记着的那把登录
+    const second = await service.apply({ email: "someone@example.com", deepseekPassword: "p2" });
+    assert.equal(second.adminPasswordCreated, false);
+    assert.equal(proxy.loginCount >= 2, true, "第二次是走登录，不是重新设置密码");
+    assert.equal(proxy.setupCount, 1);
+  } finally {
+    await proxy.close();
+  }
+});
+
+test("接入助手：密码不对时不会把错的密码记下来", async () => {
+  const proxy = await startMockDsFreeServer({ adminPassword: "right-password" });
+  try {
+    const browser = fakeBrowserHarness();
+    const store = fakeAdminPasswordStore();
+    const service = makeService({ proxyBaseUrl: proxy.baseUrl, browser, proxyProcess: fakeProxyProcess(), written: [], adminPasswordStore: store });
+    await service.start({ proxyBaseUrl: proxy.baseUrl });
+    await waitForCapture(service);
+
+    await assert.rejects(
+      async () => await service.apply({ email: "someone@example.com", deepseekPassword: "p", adminPassword: "wrong-password" }),
+      /反代管理登录失败/,
+    );
+    assert.equal(store.current(), null, "错密码绝不能落库");
+  } finally {
+    await proxy.close();
+  }
+});
+
+test("接入助手：本机没存过、这次也没填 → 明确说要填，而不是拿空密码去登录", async () => {
+  const proxy = await startMockDsFreeServer({ adminPassword: null });
+  try {
+    const browser = fakeBrowserHarness();
+    const service = makeService({ proxyBaseUrl: proxy.baseUrl, browser, proxyProcess: fakeProxyProcess(), written: [], adminPasswordStore: fakeAdminPasswordStore() });
+    await service.start({ proxyBaseUrl: proxy.baseUrl });
+    await waitForCapture(service);
+    await assert.rejects(
+      async () => await service.apply({ email: "someone@example.com", deepseekPassword: "p" }),
+      /请填反代管理密码/,
+    );
+    assert.equal(proxy.loginCount, 0, "没密码就不该去试登录");
   } finally {
     await proxy.close();
   }

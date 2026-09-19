@@ -26,8 +26,15 @@ test("接入助手接口：状态查询只给该给的，一个密钥字段都�
     assert.equal(body.proxyStarted, null);
     assert.equal(body.proxyProjectUrl, "https://github.com/NIyueeE/ds-free-api", "界面要能标明反代是哪个开源项目");
     assert.ok(typeof body.pageHint === "string" && (body.pageHint as string).length > 0);
-    const text = JSON.stringify(body);
-    assert.ok(!/password|apiKey|token/i.test(text), "状态里不该出现任何密码/密钥字段：" + text);
+    // 允许出现 XxxSaved 这类布尔标记，但绝不允许出现任何密钥"值"
+    for (const [key, value] of Object.entries(body)) {
+      if (!/password|secret|apikey|token/i.test(key)) continue;
+      assert.ok(
+        typeof value === "boolean" || value === null,
+        "状态里的 " + key + " 只能是布尔/空标记，不能带出密钥值：" + JSON.stringify(value),
+      );
+    }
+    assert.ok(!/sk-[a-z0-9]/i.test(JSON.stringify(body)), "状态里不该出现密钥明文");
   } finally {
     await server.close();
   }

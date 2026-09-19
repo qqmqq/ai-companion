@@ -71,7 +71,9 @@ docker compose -f docker/docker-compose.yaml up -d
    - **自动把模型加进「已配置的模型」**：建好 provider `ds-free-proxy`（`baseUrl = http://127.0.0.1:22217`，模型 `deepseek-default`）。
      这一步先不写密钥（那时还不知道），所以它会**先处于停用状态** —— 免得任务被路由到一条打不通的 provider 上；
      点「一键写入」补上密钥时会自动启用。
-3. 回到本页填三样：DeepSeek 账号（**邮箱或手机号都行**）、DeepSeek 密码、**反代管理密码**（`/admin` 的密码；没设过就用你填的这个设上）。
+3. 回到本页填：DeepSeek 账号（**邮箱或手机号都行**）、DeepSeek 密码，以及**第一次**需要的反代管理密码（`/admin` 的密码；没设过就用你填的这个设上）。
+   - 管理密码**成功用过一次就记在本机加密库里**，下次这一栏直接不出现（要改可以点「换一个管理密码」）。
+     密码不对时绝不落库；界面与接口都只回"存过没有"，永远不回显密码本身。
    - 手机号账号会自动写成反代要的 `mobile` + `area_code`；填错字段会被反代当成用户名错误（`PASSWORD_OR_USER_NAME_IS_WRONG`），
      表现却是"生成超时"—— 所以这里替你分清楚了。之前错写进 `email` 的那条会在下次写入时就地改掉，不留僵尸账号。
 4. 点 **一键写入并配好 provider**，本程序会：
@@ -94,7 +96,7 @@ docker compose -f docker/docker-compose.yaml up -d
 | POST | `/api/integrations/ds-free/start` | 开真实浏览器并开始自动获取（幂等：已在等就返回当前状态）；可带 `binaryPath` 告诉它反代程序在哪 |
 | GET | `/api/integrations/ds-free/status` | 当前阶段、设备指纹、窗口有没有自动关、反代是不是我们起的、模型加没加；**不含任何密钥字段** |
 | POST | `/api/integrations/ds-free/stop` | 停止等待并清空本轮的抓取状态 |
-| POST | `/api/integrations/ds-free/apply` | 一键写入（账号池 + API Key + provider），只回掩码 |
+| POST | `/api/integrations/ds-free/apply` | 一键写入（账号池 + API Key + provider），只回掩码；`adminPassword` 可省略（用本机记着的那把） |
 
 **纪律与边界**（代码注释里写了，也有用例守着）：
 
@@ -147,6 +149,7 @@ docker compose -f docker/docker-compose.yaml up -d
 | REAL_PAGE_CAPTURE | VERIFIED —— 本机 Chrome 打真实登录页，设备指纹成功取出 |
 | ADMIN_PROTOCOL | VERIFIED —— 对真实 v0.2.11 进程完成「首次设密码 → 写账号+Key → 读回 → 生成的 Key 能调 /v1/models」 |
 | ACCOUNT_KIND | VERIFIED —— 邮箱/手机号分别写成 `email` 与 `mobile`+`area_code`（单测 7 例 + 集成用例）；被错写进 `email` 的手机号会就地改掉 |
+| ADMIN_PASSWORD_KEPT | VERIFIED —— 管理密码登录成功后进本机加密库，之后不再问；错密码不落库；状态只回布尔（集成用例 3 例 + 界面用例） |
 | POST_WRITE_CHECK | VERIFIED —— 一键写入后当场真发一次请求，通/不通直接写在界面上 |
 | AUTO_FINISH | VERIFIED —— 抓完自动关窗、自动拉起反代、自动把模型加进「已配置的模型」（真机实测） |
 | END_TO_END_PENDING | PENDING —— 你填自己的 DeepSeek 账号后点一次「一键写入」即可闭环 |

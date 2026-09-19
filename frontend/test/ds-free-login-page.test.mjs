@@ -48,6 +48,7 @@ function statusBody(overrides = {}) {
     binaryPath: null,
     providerId: null,
     providerNote: "",
+    adminPasswordSaved: false,
     lastError: null,
     ...overrides,
   };
@@ -236,6 +237,31 @@ test("账号那一栏要收手机号；验不通时把原因写在页面上，�
   await settle();
   assert.match(text(), /已实测一次真实请求：不通/);
   assert.match(text(), /账号池无可用账号/);
+  await act(async () => { root.unmount(); });
+});
+
+test("管理密码在本机存过之后：这一栏不再出现，也不再要求填（可以点「换一个」改）", async () => {
+  const state = installApi(capturedBody({ adminPasswordSaved: true }));
+  const { root } = await mount();
+
+  assert.equal(inputByPlaceholder("管理面板的密码"), undefined, "存过就不该再问用户要");
+  assert.match(text(), /反代管理密码已经记在本机加密库里/);
+
+  await act(async () => {
+    setValue(inputByPlaceholder("登录邮箱"), "someone@example.com");
+    setValue(inputByPlaceholder("只用于这一次写入"), "deepseek-password");
+  });
+  await settle(2);
+  assert.equal(button("一键写入并配好 provider").disabled, false, "不用再填管理密码也该能提交");
+  await act(async () => { button("一键写入并配好 provider").dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true })); });
+  await settle();
+  assert.deepEqual(state.applies, [{ email: "someone@example.com", deepseekPassword: "deepseek-password" }], "不该把空的管理密码发给后端");
+
+  // 想换一个：点一下栏目回来，并且必须填够 6 位
+  await act(async () => { button("换一个管理密码").dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true })); });
+  await settle(2);
+  assert.ok(inputByPlaceholder("管理面板的密码") !== undefined, "点了「换一个」就要把输入框放出来");
+  assert.equal(button("一键写入并配好 provider").disabled, true, "说要换就得填");
   await act(async () => { root.unmount(); });
 });
 

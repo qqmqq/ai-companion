@@ -38,6 +38,9 @@ import { createChatCharacterSwitch } from "../core/services/chat-character-switc
 import { createDsFreeLoginService, pickProviderTarget, providerEnabledAfterRegister } from "../integrations/ds-free/service.ts";
 import { createDsFreeProxyProcess } from "../integrations/ds-free/proxy-process.ts";
 
+/** 反代管理密码在本机加密库里的账户名（不是 provider id，避免和 provider 的密钥串台） */
+const DS_FREE_ADMIN_ACCOUNT = "ds-free-proxy:admin";
+
 /** 用户告诉过我们一次的反代可执行文件路径（下次直接用） */
 const DS_FREE_BINARY_SETTING = "dsFree.binaryPath";
 import { createConversationService } from "../core/services/conversation-service.ts";
@@ -779,6 +782,17 @@ export async function createContainer(options: CreateContainerOptions): Promise<
       rememberedPath: () => settings.get<string | null>(DS_FREE_BINARY_SETTING, null),
       rememberPath: (path) => settings.put(DS_FREE_BINARY_SETTING, path, clock.nowIso()),
     }),
+    // 反代管理密码用一次就记住（只进加密库；接口只回"存过没有"）
+    adminPasswordStore: {
+      get: async () => {
+        const secret = await credentials.getSecret(DS_FREE_ADMIN_ACCOUNT);
+        const value = secret?.["password"];
+        return typeof value === "string" && value.length > 0 ? value : null;
+      },
+      put: async (password) => {
+        await credentials.putSecret(DS_FREE_ADMIN_ACCOUNT, { password });
+      },
+    },
     ...(options.fetchImpl === undefined ? {} : { fetchImpl: options.fetchImpl }),
   });
 
