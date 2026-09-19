@@ -1,5 +1,17 @@
 # Third-party notices / 第三方声明
 
+## 可选的外部程序：ds-free-api（不在本仓库内，也不随本仓库分发）
+
+「模型设置 → 接入助手」可以帮你**找到并启动**你自己下载的 `ds-free-api`，并把请求转到它上面，
+用来省掉模型 API 费用。它由别人开发、以 **GPL-3.0** 发布：
+
+- Repository: https://github.com/NIyueeE/ds-free-api （GPL-3.0）
+- What we use: 只调用它本机 HTTP 接口（`/health`、`/admin/api/*`、`/v1/models`、`/v1/chat/completions`）。
+- What we did NOT do: **没有**打包、下载、修改或链接它的代码；本仓库不包含它的任何源码或二进制，
+  也不会自动替你获取它（需要你自己下载，我们只负责在你机器上找到并启动）。
+- 它是第三方非官方项目：稳定性、合规与风险由使用者自行判断（见 `docs/DS-FREE-API-PROXY.md` 第 4 节）。
+- 因为它以 GPL-3.0 发布：**不要把它的代码拷进本仓库**。只调用接口不构成衍生作品。
+
 ## Reference only, no code copied / 仅作研究参考，未复制代码
 
 The channel architecture in this project was designed after studying
@@ -14,6 +26,8 @@ which documents the Weixin Backend API protocol.
   dependency is declared; the channel implementation is written independently.
 - If any code is ever copied from that project, this notice must be updated and the
   MIT copyright notice preserved in the affected files.
+
+QQ 渠道同理：只按腾讯 QQ 开放平台公开文档实现（WebSocket 网关 + REST 发送），未引入任何渠道 SDK。
 
 ## Runtime dependencies
 

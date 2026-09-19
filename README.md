@@ -6,7 +6,7 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![Node](https://img.shields.io/badge/node-%E2%89%A522.13-339933?logo=node.js&logoColor=white)](package.json)
 [![pnpm](https://img.shields.io/badge/pnpm-10-F69220?logo=pnpm&logoColor=white)](pnpm-workspace.yaml)
-[![Tests](https://img.shields.io/badge/tests-442%20passing-brightgreen)](#-验证)
+[![Tests](https://img.shields.io/badge/tests-496%20passing-brightgreen)](#-验证)
 [![Arch Guards](https://img.shields.io/badge/%E6%9E%B6%E6%9E%84%E5%AE%88%E5%8D%AB-8%2F8-blue)](#%E6%9E%B6%E6%9E%84%E7%A1%AC%E5%AE%88%E5%8D%AB)
 
 > 不是一个"聊天框套壳"，而是一套完整的陪伴系统：**角色有版本、关系有历史、情绪会变化、说过的事会真的被记住并兑现。**
@@ -52,7 +52,11 @@
   定时提醒与主动消息复用同一条上下文链路（人设 + 记忆 + 关系 + 情绪一起进提示词），到点说出来的是角色口吻的话，而不是把记录原文念一遍。自主等级、静音时段、每日上限、冷却都能配。
 
 - 🔌 **渠道可插拔，模型可换**
-  网页（内置）+ 微信（可选模块，含图片/文件/视频/语音的加解密与编解码）。LLM / ASR / TTS 都走同一套 Provider 注册表，任务档位（chat / 记忆抽取 / 情绪分析 / 角色设定…）可以分别选不同模型。
+  网页（内置）+ 微信（可选模块，含图片/文件/视频/语音的加解密与编解码）+ QQ（可选模块，私聊与群聊 @）。LLM / ASR / TTS 都走同一套 Provider 注册表，任务档位（chat / 记忆抽取 / 情绪分析 / 角色设定…）可以分别选不同模型。
+
+- 💸 **接入助手：开一次真实网页，剩下的自动做完（可选，省钱用）**
+  点一下会打开真实的浏览器窗口进入 DeepSeek 登录页，自动读出反代登录必需的设备指纹，然后**自动关窗 → 自动把你本机的 [ds-free-api](https://github.com/NIyueeE/ds-free-api) 反代跑起来 → 自动把模型加进「已配置的模型」**；你只需填账号密码，一键写入后就当场真发一次请求告诉你通不通。
+  （反代是别人的 GPL-3.0 开源项目：本项目不打包、不下载它，只调用它的本机接口，见 [NOTICE](NOTICE) 与 `docs/DS-FREE-API-PROXY.md`。）
 
 - 🛡️ **8 条架构硬守卫，越界即失败**
   不是文档里的口头约定，而是 CI 里真跑的测试（见「架构硬守卫」）。
@@ -66,7 +70,7 @@
 | **语言** | TypeScript（Node 24 原生类型剥离，`.ts` 直接运行，**无构建步骤**） |
 | **后端** | [Fastify 5](https://fastify.dev/) · [zod](https://zod.dev/) 校验 · `node:sqlite`（WAL + 外键） · `silk-wasm`（微信语音 SILK 编解码） |
 | **前端** | React 19 · Vite 6 · 原生 CSS（无 UI 框架依赖） · 界面全中文 |
-| **工程** | pnpm workspace（`backend` / `frontend` / `scripts`） · `node:test`（后端 406 例 / 前端 36 例） |
+| **工程** | pnpm workspace（`backend` / `frontend` / `scripts`） · `node:test`（后端 441 例 / 前端 55 例） |
 | **架构** | 六边形：`core/`（model · ports · services · context · memory）+ 渠道适配层；组合根 `app/bootstrap.ts` 是唯一装配点 |
 | **模型** | OpenAI 兼容 / Ollama / 内置 echo 占位；ModelRouter 按任务档位选 Provider + Model，失败可解释 |
 | **存储** | SQLite（迁移脚本 + FTS5 中文检索） · 本地媒体存储（凭据 AES 加密，密钥单独存放） |
@@ -78,12 +82,13 @@ backend/src/
 ├── app/         组合根：配置、脱敏日志、事件总线、bootstrap、HTTP 服务器
 ├── api/         路由与 DTO（characters / conversations / timeline / scheduler / proactive …）
 ├── core/        Companion Core：model / ports / services / context / memory（不认识任何平台）
-├── channels/    渠道适配层（web；微信为可选模块）
+├── channels/    渠道适配层（web 内置；weixin / qq 为可选模块，删掉目录也能构建）
+├── integrations/ 外部集成（ds-free 反代接入助手：找程序、起进程、读页面设备指纹）
 ├── providers/   LLM / ASR / TTS Provider + ModelRouter + TaskLLM
 ├── security/    加解密、密钥来源、脱敏、不可信内容包装
 ├── storage/     SQLite、迁移、仓储实现、FTS5 检索
 └── util/        纯工具
-frontend/        React + Vite（角色 / 聊天 / 记忆 / 关系与情绪 / 事件与任务 / 主动消息 / 微信 / 模型设置）
+frontend/        React + Vite（角色 / 聊天 / 记忆 / 关系与情绪 / 事件与任务 / 主动消息 / 微信 / QQ / 模型设置·接入助手）
 scripts/         开发脚本（同时起前后端）
 docs/            各阶段交付报告与故障复盘
 ```
@@ -134,6 +139,7 @@ pnpm dev               # 同时启动后端(8787) 与前端(5173)
 打开 **http://127.0.0.1:5173**，然后：
 
 1. **模型设置** → 填 OpenAI 兼容服务或 Ollama（Base URL + 模型 + API Key）→ 保存 → 「测试连接」；再到「任务用哪个模型」为「日常聊天」选 Provider 与 Model（支持自动发现，也可手填）；
+   （想省钱也可以直接用页面上的 **接入助手**：打开真实网页自动获取所需 → 一键写入 → 自动配好本机 DeepSeek 网页反代，详见 `docs/DS-FREE-API-PROXY.md`）
 2. **角色** → 「角色工坊：用一段话创建」写几句设想，让 AI 补全人设 →「确认，存成新角色」；
 3. **聊天** → 发消息（流式），可点「查看上下文」看这一轮模型到底看到了什么；
 4. 试试自然语言：「**明天中午12点提醒我去开会**」→ 到点会由角色用自己的语气提醒你；
@@ -143,7 +149,7 @@ pnpm dev               # 同时启动后端(8787) 与前端(5173)
 
 ```bash
 pnpm typecheck     # 全量类型检查
-pnpm test          # 后端 406 例 + 前端 36 例（单元 / 集成 / 架构守卫）
+pnpm test          # 后端 441 例 + 前端 55 例（单元 / 集成 / 架构守卫）
 pnpm guard         # 只跑 8 条架构硬守卫
 pnpm build         # 后端类型检查 + 前端产物构建
 pnpm --filter @companion/backend smoke   # 冒烟：聊天 / 记忆 / 上下文
@@ -170,7 +176,8 @@ pnpm --filter @companion/backend smoke   # 冒烟：聊天 / 记忆 / 上下文
 
 本项目以 **MIT License** 发布，详见 [LICENSE](LICENSE)。
 
-第三方声明见 [NOTICE](NOTICE)：微信渠道的协议实现参考了腾讯公开文档化的 `Tencent/openclaw-weixin`（MIT）**协议事实**，未复制其源码，也未依赖其运行时。
+第三方声明见 [NOTICE](NOTICE)：微信渠道参考腾讯公开文档化的 `Tencent/openclaw-weixin`（MIT）**协议事实**，未复制源码、未依赖其运行时；
+「接入助手」支持的本机反代 [ds-free-api](https://github.com/NIyueeE/ds-free-api) 是第三方 **GPL-3.0** 项目 —— 本项目只调用它的 HTTP 接口，**不打包、不下载、不修改**它的代码。
 
 ---
 
