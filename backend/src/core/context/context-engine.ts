@@ -15,6 +15,7 @@ import { estimateTokens } from "./tokens.ts";
 import type { CharacterDefinition } from "../model/character.ts";
 import { uuidv7 } from "../../util/ids.ts";
 import { nowIso } from "../../util/time.ts";
+import { describeNowForPrompt, describeRelative, formatDateTimeLocal, formatShortMoment } from "../../util/time-format.ts";
 
 /** 优先级：数字越小越先保留（Phase 0 报告 §9.2）。 */
 /**
@@ -24,18 +25,20 @@ import { nowIso } from "../../util/time.ts";
  */
 export const SECTION_PRESENTATION_ORDER: Record<ContextSectionKind, number> = {
   app_instructions: 0,
-  character_system_prompt: 1,
-  character_definition: 2,
-  relationship_state: 3,
-  emotion_state: 4,
-  runtime_state: 5,
-  memories: 6,
-  events: 7,
-  conversation_summary: 8,
-  background: 9,
-  recent_conversation: 10,
-  proactive_intent: 11,
-  current_message: 12,
+  // 「现在几点、上次说话是多久以前」紧跟在应用约束之后：角色先有现实感，再谈人设
+  time_context: 1,
+  character_system_prompt: 2,
+  character_definition: 3,
+  relationship_state: 4,
+  emotion_state: 5,
+  runtime_state: 6,
+  memories: 7,
+  events: 8,
+  conversation_summary: 9,
+  background: 10,
+  recent_conversation: 11,
+  proactive_intent: 12,
+  current_message: 13,
 };
 
 /**
@@ -45,8 +48,9 @@ export const SECTION_PRESENTATION_ORDER: Record<ContextSectionKind, number> = {
 export const SECTION_PRIORITY: Record<ContextSectionKind, number> = {
   current_message: 0,
   proactive_intent: 1,
-  // 应用约束与角色定义是"人设底线"，永不丢弃
+  // 应用约束、时间基准与角色定义是"底线"，永不丢弃（时间那一段只有几十个 token）
   app_instructions: 2,
+  time_context: 2,
   character_definition: 2,
   character_system_prompt: 3,
   recent_conversation: 3,
@@ -119,6 +123,51 @@ export function createContextEngine(deps: ContextEngineDeps) {
 
   function memoryLimit(): number {
     return Math.max(0, deps.settings.get<number>("context.memoryLimit", 6));
+  }
+
+  /** 展示时间用的时区：留空就用系统本地时区（与定时提醒保持一致） */
+  function timeZone(): string | undefined {
+    const configured = deps.settings.get<string | null>("context.timeZone", null);
+    return configured === null || configured.trim().length === 0 ? undefined : configured.trim();
+  }
+
+  /**
+   * 现实时间基准：角色要有时间概念，先得知道"现在几点、上次说话是多久以前"。
+   * 只说事实与措辞边界，不替角色写台词（与人设、情绪两段同一套纪律）。
+   */
+  function timeContextSection(input: BuildContextInput, history: Message[]): ContextSection {
+    const nowAt = deps.clock.nowIso();
+    const tz = timeZone();
+    const previous = history.filter((message) => message.id !== input.incomingMessage?.id).at(-1) ?? null;
+    const lastUser = [...history].reverse().find((message) => message.role === "user" && message.id !== input.incomingMessage?.id) ?? null;
+    const lastCharacter = [...history].reverse().find((message) => message.role === "character" && message.id !== input.incomingMessage?.id) ?? null;
+
+    const lines: string[] = [`现在是 ${describeNowForPrompt(nowAt, tz)}（本地时间）。`];
+    if (previous === null) {
+      lines.push("这是你们第一次说话，之前没有聊过。");
+    } else {
+      lines.push(`你们上一次说话是 ${formatDateTimeLocal(previous.createdAt, tz)}（${describeRelative(previous.createdAt, nowAt)}）。`);
+      if (lastUser !== null && lastUser.id !== previous.id) {
+        lines.push(`距离用户上一次开口：${describeRelative(lastUser.createdAt, nowAt)}。`);
+      }
+      if (lastCharacter !== null) {
+        lines.push(`距离你上一次说话：${describeRelative(lastCharacter.createdAt, nowAt)}。`);
+      }
+    }
+    lines.push("");
+    lines.push("说话时可以自然带出时间感（例如「好久没聊了」「都这个点了」），但注意：");
+    lines.push("- 间隔很久就当作隔了很久，刚聊完就接着上文，别说反；");
+    lines.push("- 不要念出具体日期数字，也不要说「系统时间」「时间戳」这类机制词。");
+
+    return section({
+      kind: "time_context",
+      priority: SECTION_PRIORITY.time_context,
+      title: "现实时间",
+      role: "system",
+      text: lines.join("\n"),
+      sourceIds: previous === null ? [] : [previous.id],
+      truncated: false,
+    });
   }
 
   /** 当前角色版本的规范定义（会话始终绑定创建时的版本，见 Phase 5 §20） */
@@ -226,13 +275,25 @@ export function createContextEngine(deps: ContextEngineDeps) {
       limit,
     });
     if (hits.length === 0) return null;
-    const text = hits.map((hit) => `- ${hit.memory.content}`).join("\n");
+    const nowAt = deps.clock.nowIso();
+    // 每条记忆都带上"什么时候发生的"：没有时间戳的记忆会变成永远新鲜的传言
+    const text = hits
+      .map((hit) => {
+        const at = hit.memory.occurredAt.length > 0 ? hit.memory.occurredAt : hit.memory.createdAt;
+        const stamp = formatDateTimeLocal(at, timeZone()) + "・" + describeRelative(at, nowAt);
+        return `- [${stamp}] ${hit.memory.content}`;
+      })
+      .join("\n");
     return section({
       kind: "memories",
       priority: SECTION_PRIORITY.memories,
       title: `相关记忆（${hits.length} 条）`,
       role: "system",
-      text: `以下是与当前话题相关的长期记忆：\n${text}`,
+      text: [
+        "以下是与当前话题相关的长期记忆（方括号里是它发生的时间与距今多久）：",
+        text,
+        "提到这些事时请把时间说对：很久以前的事别当成刚刚发生。",
+      ].join("\n"),
       sourceIds: hits.map((hit) => hit.memory.id),
       truncated: false,
     });
@@ -304,7 +365,9 @@ export function createContextEngine(deps: ContextEngineDeps) {
     const text = merged
       .map((event) => {
         const when = event.dueAt ?? event.scheduledAt ?? event.occurredAt;
-        return `- ${event.title}${when === null ? "" : `（${when.slice(0, 16).replace("T", " ")}）`}${event.description.length > 0 ? `：${event.description}` : ""}`;
+        // 以前是直接切 ISO 字符串 —— 那等于把 UTC 当本地时间念（差整个时区），现在按本地时间写
+        const whenText = when === null ? "" : `（${formatShortMoment(when, timeZone())}・${describeRelative(when, nowIso)}）`;
+        return `- ${event.title}${whenText}${event.description.length > 0 ? `：${event.description}` : ""}`;
       })
       .join("\n");
     return section({
@@ -318,8 +381,7 @@ export function createContextEngine(deps: ContextEngineDeps) {
     });
   }
 
-  function recentConversationSections(input: BuildContextInput): ContextSection[] {
-    const history = deps.messages.listByConversation(input.conversation.id, { limit: recentMessageLimit() });
+  function recentConversationSections(input: BuildContextInput, history: Message[]): ContextSection[] {
     const filtered = input.incomingMessage === null ? history : history.filter((m) => m.id !== input.incomingMessage!.id);
     return filtered
       .filter((message) => message.role === "user" || message.role === "character")
@@ -407,13 +469,17 @@ export function createContextEngine(deps: ContextEngineDeps) {
       const found = definitionOf(input.conversation);
       candidates.push(appInstructionsSection(found?.definition.name ?? "角色", input.actionNote ?? null));
 
+      // 历史只取一次：时间基准与最近对话两段共用同一份，口径不会打架
+      const history = deps.messages.listByConversation(input.conversation.id, { limit: recentMessageLimit() });
+      candidates.push(timeContextSection(input, history));
+
       const systemPrompt = characterSystemPromptSection(input);
       if (systemPrompt !== null) candidates.push(systemPrompt);
 
       const definition = definitionSection(input);
       if (definition !== null) candidates.push(definition);
 
-      candidates.push(...recentConversationSections(input));
+      candidates.push(...recentConversationSections(input, history));
 
       const state = runtimeStateSection(input.conversation.characterId);
       if (state !== null) candidates.push(state);

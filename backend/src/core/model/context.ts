@@ -8,6 +8,7 @@ export type ContextSectionKind =
   | "current_message" // P0
   | "proactive_intent" // 主动消息：为什么现在要说话
   | "app_instructions" // 应用级系统约束（永远最前）
+  | "time_context" // 现在几点、上次说话是多久以前（角色要有时间概念）
   | "character_system_prompt" // 角色自己的 system prompt
   | "character_definition"
   | "recent_conversation"

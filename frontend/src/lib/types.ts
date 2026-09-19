@@ -161,6 +161,9 @@ export interface MemoryDto {
   reinforcement: number;
   accessCount: number;
   status: string;
+  /** 这件事发生的时间（抽取时的现实时间） */
+  occurredAt: string;
+  /** 这条记忆写进库的时间 */
   createdAt: string;
 }
 

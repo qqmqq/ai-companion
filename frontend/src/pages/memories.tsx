@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { api } from "../lib/api.ts";
 import type { MemoryDto, MemoryHitDto, MessageDto } from "../lib/types.ts";
+import { describeMoment } from "../lib/moment-text.ts";
 
 export function MemoriesPage(props: { characterId: string | null; onError: (message: string) => void }) {
   const [memories, setMemories] = useState<MemoryDto[]>([]);
@@ -66,6 +67,9 @@ export function MemoriesPage(props: { characterId: string | null; onError: (mess
                 <strong>{hit.memory.content}</strong>
                 <span className="score">{"综合 "}{hit.score.toFixed(3)}</span>
               </div>
+              <div className="meta">
+                <span>记于 {describeMoment(hit.memory.occurredAt)}</span>
+              </div>
               {showAdvanced && (
                 <div className="meta">
                   <span>关键词 {hit.components.fts.toFixed(2)}</span>
@@ -89,6 +93,8 @@ export function MemoriesPage(props: { characterId: string | null; onError: (mess
             <div className="meta">
               <span>{memory.type}</span>
               <span>{memory.scope}</span>
+              {/* 让"记了多久"看得见：角色在对话里也会拿到同一个时间戳 */}
+              <span title={memory.occurredAt}>记于 {describeMoment(memory.occurredAt)}</span>
               {memory.tags.map((tag) => (
                 <span key={tag} className="tag">
                   #{tag}

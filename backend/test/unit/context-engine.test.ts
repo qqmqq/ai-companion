@@ -132,3 +132,78 @@ test("duplicate content is dropped and reported as duplicate", async () => {
     stack.close();
   }
 });
+test("角色有时间概念：上下文里给出「现在」与「上次说话是多久以前」，记忆带现实时间戳", async () => {
+  const stack = createChatStack({
+    startIso: "2026-03-01T09:00:00.000Z",
+    extractionReply: JSON.stringify([
+      { scope: "user", type: "preference", content: "用户喜欢手冲咖啡", importance: 0.8, confidence: 0.9, tags: ["咖啡"] },
+    ]),
+  });
+  try {
+    // 固定时区，断言就与跑测试的机器无关（CI 在 UTC，本机可能在 UTC+8）
+    stack.settings.put("context.timeZone", "Asia/Shanghai", stack.clock.nowIso());
+
+    const first = stack.conversationService.appendUserMessage(stack.conversationId, [{ kind: "text", text: "我平时爱喝手冲咖啡" }]);
+    await stack.conversationService.reply(stack.conversationId, stack.userId, first);
+    await stack.memory.extract({
+      userId: stack.userId,
+      characterId: stack.characterId,
+      conversationId: stack.conversationId,
+      userMessageId: first.id,
+      assistantMessageId: null,
+      userText: "我平时爱喝手冲咖啡",
+      assistantText: "记住了",
+      characterName: "Aria",
+      userName: "你",
+    });
+
+    // 三天后再开口
+    stack.clock.advance(3 * 24 * 60 * 60 * 1000);
+    const incoming = stack.conversationService.appendUserMessage(stack.conversationId, [{ kind: "text", text: "今天想喝点咖啡" }]);
+    const built = await stack.context.build({
+      conversation: stack.conversationService.get(stack.conversationId),
+      userId: stack.userId,
+      incomingMessage: incoming,
+      taskType: "chat",
+    });
+
+    const time = built.bundle.sections.find((section) => section.kind === "time_context");
+    assert.ok(time !== undefined, "必须有现实时间这一段");
+    assert.match(time.text, /现在是 2026年3月4日 周三/, "要说清现在是什么时候：" + time.text);
+    assert.match(time.text, /你们上一次说话是 2026-03-01 17:00（3 天前）/, "要说清隔了多久：" + time.text);
+    assert.match(time.text, /不要念出具体日期数字/, "要给措辞边界，而不是替角色写台词");
+
+    // 时间基准必须排在人设之前、当前消息之前
+    const kinds = built.bundle.sections.map((section) => section.kind);
+    assert.ok(kinds.indexOf("time_context") < kinds.indexOf("character_definition"));
+    assert.equal(kinds.at(-1), "current_message");
+
+    // 记忆带时间戳：方括号里是它发生的时间与距今多久
+    const memories = built.bundle.sections.find((section) => section.kind === "memories");
+    assert.ok(memories !== undefined);
+    assert.match(memories.text, /- \[2026-03-01 17:00・3 天前\] 用户喜欢手冲咖啡/, memories.text);
+    assert.match(memories.text, /很久以前的事别当成刚刚发生/);
+  } finally {
+    stack.close();
+  }
+});
+
+test("第一次说话时不说「上次聊过」，直接说这是你们第一次", async () => {
+  const stack = createChatStack({ startIso: "2026-03-01T09:00:00.000Z" });
+  try {
+    stack.settings.put("context.timeZone", "Asia/Shanghai", stack.clock.nowIso());
+    const incoming = stack.conversationService.appendUserMessage(stack.conversationId, [{ kind: "text", text: "在吗" }]);
+    const built = await stack.context.build({
+      conversation: stack.conversationService.get(stack.conversationId),
+      userId: stack.userId,
+      incomingMessage: incoming,
+      taskType: "chat",
+    });
+    const time = built.bundle.sections.find((section) => section.kind === "time_context");
+    assert.ok(time !== undefined);
+    assert.match(time.text, /这是你们第一次说话/);
+    assert.equal(time.text.includes("上一次说话"), false, "第一次没有「上一次」可说");
+  } finally {
+    stack.close();
+  }
+});

@@ -25,6 +25,7 @@ const DEFINITION = {
 /** 仍然存在的全部上下文分区，按呈现顺序书写。 */
 const ORDERED_KINDS: ContextSectionKind[] = [
   "app_instructions",
+  "time_context",
   "character_system_prompt",
   "character_definition",
   "relationship_state",
@@ -164,6 +165,7 @@ test("上下文分区顺序与优先级是确定的，且只覆盖仍然存在�
       current_message: 0,
       proactive_intent: 1,
       app_instructions: 2,
+      time_context: 2,
       character_definition: 2,
       character_system_prompt: 3,
       recent_conversation: 3,
