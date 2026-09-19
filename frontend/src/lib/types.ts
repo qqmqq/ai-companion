@@ -132,7 +132,9 @@ export interface ProviderDto {
 export interface RoutingItemDto {
   taskType: string;
   configured: { providerId: string | null; model: string | null } | null;
-  resolved: { providerId: string; model: string };
+  /** 一个能用的模型都没有时是 null（不是报错） */
+  resolved: { providerId: string; model: string } | null;
+  unavailableReason?: string | null;
 }
 
 export interface UsageSummaryDto {

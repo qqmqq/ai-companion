@@ -198,6 +198,29 @@ test("模型发现失败时仍然可以手填模型，并且手填的值会真�
   }
 });
 
+test("一个能用的模型都没有时：路由列表不报错，而是给出原因（真实踩过：整页 500）", async () => {
+  const ctx = await setup();
+  try {
+    // 把内置占位模型也删掉，模拟"用户把 provider 全删了"
+    const providers = ((await (await fetch(ctx.baseUrl + "/api/providers")).json()) as { items: Array<{ id: string }> }).items;
+    assert.ok(providers.length > 0, "新库里应该有内置占位模型");
+    for (const provider of providers) {
+      const removed = await fetch(ctx.baseUrl + "/api/providers/" + provider.id, { method: "DELETE" });
+      assert.equal(removed.status, 204);
+    }
+
+    const response = await fetch(ctx.baseUrl + "/api/model-routing");
+    assert.equal(response.status, 200, "没有可用模型是可预期的状态，不该 500");
+    const items = ((await response.json()) as { items: Array<{ taskType: string; resolved: unknown; unavailableReason: string | null }> }).items;
+    const chat = items.find((item) => item.taskType === "chat");
+    assert.equal(chat?.resolved, null);
+    assert.match(chat?.unavailableReason ?? "", /还没有可用的模型/, "要告诉用户去配模型，而不是丢一句英文错误");
+    for (const item of items) assert.equal(item.resolved, null);
+  } finally {
+    await ctx.close();
+  }
+});
+
 test("配置是持久的：重新读一遍 API，Provider 与 Model 仍然是用户选的那套", async () => {
   const ctx = await setup();
   try {

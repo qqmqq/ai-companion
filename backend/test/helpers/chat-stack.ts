@@ -221,6 +221,7 @@ export function createChatStack(options: ChatStackOptions = {}): ChatStack {
   const taskLLM = createTaskLLM({
     router: {
       resolve: (task: TaskType) => ({ taskType: task, providerId: "scripted", model: "scripted-model" }),
+      resolveOrNull: (task: TaskType) => ({ taskType: task, providerId: "scripted", model: "scripted-model" }),
       listRoutes: () => [],
     },
     providers: registry,

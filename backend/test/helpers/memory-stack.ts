@@ -128,6 +128,7 @@ export function createMemoryStack(responses: string[], nowMs: () => number = () 
   const taskLLM = createTaskLLM({
     router: {
       resolve: (task: TaskType) => ({ taskType: task, providerId: "fake", model: "fake-model" }),
+      resolveOrNull: (task: TaskType) => ({ taskType: task, providerId: "fake", model: "fake-model" }),
       listRoutes: () => [],
     },
     providers: registry,

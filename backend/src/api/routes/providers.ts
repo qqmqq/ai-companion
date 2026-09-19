@@ -23,6 +23,9 @@ const ProviderSchema = z.object({
   apiKey: z.string().min(1).max(500).optional(),
 });
 
+/** 一个能用的模型都没有时给用户的那句话（界面直接显示） */
+const NO_PROVIDER_REASON = "还没有可用的模型：先在下面加一个 Provider（或用「接入助手」一次配好反代），再把任务指向它。";
+
 const RouteSchema = z.object({
   taskType: z.enum(TASK_TYPES as [string, ...string[]]),
   providerId: z.string().min(1).nullable(),
@@ -146,16 +149,22 @@ export function registerProviderRoutes(app: FastifyInstance, container: Containe
     return { items };
   });
 
+  /**
+   * 列出每个任务实际会用哪个模型。
+   * 一个能用的 Provider 都没有时**不报错**：返回 resolved=null + 一句中文原因，
+   * 否则设置页会因为"还没配模型"整页打不开（真实踩过）。
+   */
   app.get("/api/model-routing", async () => {
     const routes = container.repos.providerConfig.listRoutes();
     return {
       items: TASK_TYPES.map((taskType) => {
         const explicit = routes.find((route) => route.taskType === taskType) ?? null;
-        const resolved = container.modelRouter.resolve(taskType);
+        const resolved = container.modelRouter.resolveOrNull(taskType);
         return {
           taskType,
           configured: explicit === null ? null : { providerId: explicit.providerId, model: explicit.model },
-          resolved: { providerId: resolved.providerId, model: resolved.model },
+          resolved: resolved === null ? null : { providerId: resolved.providerId, model: resolved.model },
+          unavailableReason: resolved === null ? NO_PROVIDER_REASON : null,
           updatedAt: explicit?.updatedAt ?? null,
         };
       }),
@@ -170,8 +179,12 @@ export function registerProviderRoutes(app: FastifyInstance, container: Containe
       model: body.model,
       updatedAt: nowIso(),
     });
-    const resolved = container.modelRouter.resolve(body.taskType as (typeof TASK_TYPES)[number]);
-    return { taskType: body.taskType, resolved: { providerId: resolved.providerId, model: resolved.model } };
+    const resolved = container.modelRouter.resolveOrNull(body.taskType as (typeof TASK_TYPES)[number]);
+    return {
+      taskType: body.taskType,
+      resolved: resolved === null ? null : { providerId: resolved.providerId, model: resolved.model },
+      unavailableReason: resolved === null ? NO_PROVIDER_REASON : null,
+    };
   });
 
   app.get("/api/usage", async (request) => {

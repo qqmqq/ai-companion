@@ -106,8 +106,12 @@ function RouteRow(props: {
   onSaved: () => Promise<void>;
   onError: (message: string) => void;
 }) {
-  const [providerId, setProviderId] = useState<string>(props.item.configured?.providerId ?? props.item.resolved.providerId);
-  const [model, setModel] = useState<string>(initialModelValue({ configured: props.item.configured?.model ?? null, resolved: props.item.resolved.model }));
+  const [providerId, setProviderId] = useState<string>(
+    props.item.configured?.providerId ?? props.item.resolved?.providerId ?? props.providers[0]?.id ?? "",
+  );
+  const [model, setModel] = useState<string>(
+    initialModelValue({ configured: props.item.configured?.model ?? null, resolved: props.item.resolved?.model ?? null }),
+  );
   const [busy, setBusy] = useState(false);
   const choices = props.models[providerId] ?? [];
 
@@ -141,7 +145,9 @@ function RouteRow(props: {
       <div className="row space-between">
         <strong>{TASK_LABELS[props.item.taskType] ?? props.item.taskType}</strong>
         <span className="score">
-          实际使用：{props.item.resolved.providerId} / {props.item.resolved.model}
+          {props.item.resolved === null
+            ? "实际使用：还没有可用的模型"
+            : "实际使用：" + props.item.resolved.providerId + " / " + props.item.resolved.model}
         </span>
       </div>
       <div className="row">
@@ -393,6 +399,13 @@ export function SettingsPage(props: { onError: (message: string) => void }) {
 
       <h2>任务用哪个模型</h2>
       <p className="hint">日常聊天可以用普通模型，记忆抽取与摘要用便宜的模型，重活留给强模型。Provider 与 Model 分开选，Model 也可以直接手填。</p>
+      {/* 一个能用的模型都没有时，把原因明说，而不是让整页报错 */}
+      {routing.some((item) => item.resolved === null) && (
+        <p className="warn">
+          {routing.find((item) => item.unavailableReason !== null && item.unavailableReason !== undefined)?.unavailableReason ??
+            "还没有可用的模型：先在下面加一个 Provider。"}
+        </p>
+      )}
       <div className="row">
         <button className="ghost" disabled={discovering || providers.length === 0} onClick={() => void discoverModels()}>
           {discovering ? "获取中…" : "刷新模型列表"}

@@ -1,9 +1,20 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { DS_FREE_DEFAULT_BASE_URL, DS_FREE_MODEL, DS_FREE_PROVIDER_ID, pickProviderTarget } from "../../src/integrations/ds-free/service.ts";
+import { DS_FREE_DEFAULT_BASE_URL, DS_FREE_MODEL, DS_FREE_PROVIDER_ID, pickProviderTarget, providerEnabledAfterRegister } from "../../src/integrations/ds-free/service.ts";
 import { DS_FREE_PROJECT_URL } from "../../src/integrations/ds-free/proxy-process.ts";
 
 const PROXY = "http://127.0.0.1:22217";
+
+test("自动登记模型时还没有密钥就先停用：否则任务会被路由到一条打不通的 provider 上", () => {
+  // 新建 + 没密钥 → 停用（一键写入补上密钥后才打开）
+  assert.equal(providerEnabledAfterRegister({ existingEnabled: null, hasKey: false }), false);
+  assert.equal(providerEnabledAfterRegister({ existingEnabled: false, hasKey: false }), false);
+  // 已经有密钥 → 打开
+  assert.equal(providerEnabledAfterRegister({ existingEnabled: null, hasKey: true }), true);
+  assert.equal(providerEnabledAfterRegister({ existingEnabled: false, hasKey: true }), true);
+  // 用户原本就打开着、这次只是重新登记模型 → 不要擅自把它关掉
+  assert.equal(providerEnabledAfterRegister({ existingEnabled: true, hasKey: false }), true);
+});
 
 test("反代地址与模型名：baseUrl 不带 /v1（我们自己的 provider 会拼 /v1/...）", () => {
   assert.equal(DS_FREE_DEFAULT_BASE_URL, PROXY);

@@ -164,11 +164,23 @@ test("tier preferences override the default pick", () => {
   assert.equal(router.resolve("chat").providerId, "x");
 });
 
-test("no enabled provider is a hard error, not a silent fallback", () => {
+test("一个能用的模型都没有：resolve 抛错（说人话），resolveOrNull 返回 null（给列表用，不把页面打崩）", () => {
   const router = createModelRouter({
     config: store([providerConfig("a", "m", false)]),
     providers: new Map([["a", stubProvider("a")]]),
     logger,
   });
-  assert.throws(() => router.resolve("chat"), /no enabled LLM provider/);
+  assert.throws(() => router.resolve("chat"), /还没有可用的模型/);
+  assert.equal(router.resolveOrNull("chat"), null);
+  // listRoutes 也不许因为"啥都没配"就炸
+  assert.deepEqual(router.listRoutes(), []);
+});
+
+test("有可用 provider 时 resolveOrNull 与 resolve 给的是同一个绑定", () => {
+  const router = createModelRouter({
+    config: store([providerConfig("a", "m", true)]),
+    providers: new Map([["a", stubProvider("a")]]),
+    logger,
+  });
+  assert.deepEqual(router.resolveOrNull("chat"), router.resolve("chat"));
 });

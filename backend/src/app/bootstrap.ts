@@ -35,7 +35,7 @@ import { createCharacterService } from "../core/services/character-service.ts";
 import { createCharacterStudioService } from "../core/services/character-studio-service.ts";
 import { createReminderComposer } from "../core/services/reminder-composer.ts";
 import { createChatCharacterSwitch } from "../core/services/chat-character-switch.ts";
-import { createDsFreeLoginService, pickProviderTarget } from "../integrations/ds-free/service.ts";
+import { createDsFreeLoginService, pickProviderTarget, providerEnabledAfterRegister } from "../integrations/ds-free/service.ts";
 import { createDsFreeProxyProcess } from "../integrations/ds-free/proxy-process.ts";
 
 /** 用户告诉过我们一次的反代可执行文件路径（下次直接用） */
@@ -757,7 +757,8 @@ export async function createContainer(options: CreateContainerOptions): Promise<
         credentialRef: hasKey ? targetId : (existing?.credentialRef ?? null),
         requiresCredential: true,
         timeoutMs: existing?.timeoutMs ?? 60_000,
-        enabled: true,
+        // 还没有密钥就先停用：别让任务被路由到一条打不通的 provider 上
+        enabled: providerEnabledAfterRegister({ existingEnabled: existing?.enabled ?? null, hasKey }),
         createdAt: existing?.createdAt ?? at,
         updatedAt: at,
       });

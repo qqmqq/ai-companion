@@ -49,14 +49,31 @@ function installApi(options = {}) {
     const url = String(input);
     const path = url.split("?")[0];
     const method = (init.method ?? "GET").toUpperCase();
-    if (path.endsWith("/api/providers") && method === "GET") return json({ items: [provider("p1", "p1-default"), provider("p2", "p2-default")] });
+    if (path.endsWith("/api/providers") && method === "GET") {
+      // 空世界 = 用户把 provider 全删了：这时后端返回空列表，路由项 resolved 为 null
+      return json({ items: options.emptyWorld === true ? [] : [provider("p1", "p1-default"), provider("p2", "p2-default")] });
+    }
     if (path.endsWith("/api/usage")) return json({ since: "x", summary: [], recent: [] });
+    // 设置页里嵌了「接入助手」，它挂载时会问一次状态
+    if (path.endsWith("/api/integrations/ds-free/status")) return json({ phase: "idle", preparing: false, deviceId: null, pageState: null, pageHint: "", browser: null, debugPort: null, browserClosed: null, signInUrl: "", proxyBaseUrl: "", proxyReachable: false, proxyStarted: null, proxyNote: "", proxyProjectUrl: "", binaryPath: null, providerId: null, providerNote: "", lastError: null });
     if (path.endsWith("/api/model-routing") && method === "GET") {
+      if (options.emptyWorld === true) {
+        return json({
+          items: TASKS.map((taskType) => ({
+            taskType,
+            configured: null,
+            resolved: null,
+            unavailableReason: "还没有可用的模型：先在下面加一个 Provider（或用「接入助手」一次配好反代），再把任务指向它。",
+            updatedAt: null,
+          })),
+        });
+      }
       return json({
         items: TASKS.map((taskType) => ({
           taskType,
           configured: taskType === "chat" ? state.configured : null,
           resolved: { providerId: "p1", model: state.configured?.model ?? "p1-default" },
+          unavailableReason: null,
           updatedAt: null,
         })),
       });
@@ -203,6 +220,17 @@ test("Test 7：切换 Provider 时，旧 Provider 的模型不会被错误保留
   const value = modelSelect(row)?.value ?? "";
   assert.notEqual(value, "model-B", "换成 p2 之后绝不能还留着 p1 的 model-B");
   assert.ok(value === "p2-model-1" || value === "p2-default", "应当切到 p2 的候选/默认模型，实际 " + value);
+  await act(async () => { root.unmount(); });
+});
+
+test("Test 9：一个能用的模型都没有时，设置页照样打开并说清原因（以前是整页 500）", async () => {
+  installApi({ emptyWorld: true });
+  const root = await mount();
+  const text = dom.window.document.getElementById("root").textContent ?? "";
+  assert.match(text, /还没有可用的模型/, "要把原因写在页面上，而不是弹一句英文错误");
+  assert.match(text, /接入助手/, "顺便指条明路：用接入助手配好");
+  assert.match(chatRow().textContent ?? "", /实际使用：还没有可用的模型/);
+  assert.deepEqual(errors, [], "这种状态不该走 onError：不是错误，是还没配");
   await act(async () => { root.unmount(); });
 });
 

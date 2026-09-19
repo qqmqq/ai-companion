@@ -103,6 +103,16 @@ export interface DsFreeLoginServiceDeps {
  * 该写哪一条 provider：已经有指向同一个反代的，就用它。
  * 否则「先手动配过、再点一键写入」会留下两条一样的记录（其中一条没密钥）。
  */
+/**
+ * 自动登记模型时要不要把它打开。
+ * 抓到设备指纹那一刻还没有密钥：这时**先停用**，否则任务会被路由到一条打不通的 provider 上，
+ * 用户看到的是 401/报错，而不是"还没配好"。一键写入补上密钥时才打开。
+ */
+export function providerEnabledAfterRegister(input: { existingEnabled: boolean | null; hasKey: boolean }): boolean {
+  if (input.hasKey) return true;
+  return input.existingEnabled ?? false;
+}
+
 export function pickProviderTarget(
   existing: Array<{ id: string; kind: string; baseUrl: string }>,
   input: { id: string; baseUrl: string },

@@ -5,6 +5,7 @@ import type { LLMProvider } from "../core/ports/llm-provider.ts";
 import type { Logger } from "../core/ports/logger.ts";
 import type { ProviderConfig } from "../core/model/usage.ts";
 import type { TaskTier, TaskType } from "../core/model/task.ts";
+import { DomainError } from "../core/model/errors.ts";
 
 /** 任务的默认档位：没有显式路由时的兜底策略。 */
 export const DEFAULT_TASK_TIER: Record<TaskType, TaskTier> = {
@@ -67,7 +68,7 @@ export function createModelRouter(deps: ModelRouterDeps): ModelRouter {
     return null;
   };
 
-  const resolve = (task: TaskType): ModelBinding => {
+  const resolveOrNull = (task: TaskType): ModelBinding | null => {
     const providers = deps.config
       .listProviders()
       .filter((config) => config.enabled && deps.providers.get(config.id) !== undefined);
@@ -89,9 +90,7 @@ export function createModelRouter(deps: ModelRouterDeps): ModelRouter {
     }
 
     const picked = pickByTier(task, providers);
-    if (picked === null) {
-      throw new Error(`no enabled LLM provider available for task ${task}`);
-    }
+    if (picked === null) return null;
     /**
      * 兜底分支里**不能**沿用一条指向别的 provider 的路由的 model。
      * 真实事故：chat 曾路由到 echo/echo-1，后来 echo 被删掉、只留下真实 provider，
@@ -106,8 +105,27 @@ export function createModelRouter(deps: ModelRouterDeps): ModelRouter {
     };
   };
 
+  /** 一个能用的模型都没有：这是配置问题 —— 用一句人话告诉用户去哪儿配 */
+  const resolve = (task: TaskType): ModelBinding => {
+    const binding = resolveOrNull(task);
+    if (binding !== null) return binding;
+    throw new DomainError(
+      "channel_unavailable",
+      "还没有可用的模型：去「模型设置」加一个 Provider（或用「接入助手」配好反代），再把任务指向它。",
+      { details: { task } },
+    );
+  };
+
   return {
     resolve,
-    listRoutes: () => deps.config.listRoutes().map((route) => resolve(route.taskType)),
+    resolveOrNull,
+    listRoutes: () => {
+      const bindings: ModelBinding[] = [];
+      for (const route of deps.config.listRoutes()) {
+        const binding = resolveOrNull(route.taskType);
+        if (binding !== null) bindings.push(binding);
+      }
+      return bindings;
+    },
   };
 }

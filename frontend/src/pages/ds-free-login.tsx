@@ -28,6 +28,14 @@ export function DsFreeLoginPanel(props: { onError: (message: string) => void; on
   const polling = useRef(false);
   /** 已经在「抓完自动加模型」这一步通知过设置页，避免反复刷新 */
   const notified = useRef(false);
+  /**
+   * 父组件每次渲染都会传新的函数进来：直接把 props 放进依赖会让 refresh 每次都变，
+   * 挂载 effect 于是反复触发 → 状态接口被无限轮询。用 ref 记住最新的回调，依赖保持为空。
+   */
+  const onErrorRef = useRef(props.onError);
+  onErrorRef.current = props.onError;
+  const onAppliedRef = useRef(props.onApplied);
+  onAppliedRef.current = props.onApplied;
 
   const refresh = useCallback(async () => {
     try {
@@ -35,10 +43,10 @@ export function DsFreeLoginPanel(props: { onError: (message: string) => void; on
       setStatus(next);
       return next;
     } catch (error) {
-      props.onError((error as Error).message);
+      onErrorRef.current((error as Error).message);
       return null;
     }
-  }, [props]);
+  }, []);
 
   useEffect(() => {
     void refresh();
@@ -49,8 +57,8 @@ export function DsFreeLoginPanel(props: { onError: (message: string) => void; on
     if (status?.providerId === null || status?.providerId === undefined) return;
     if (notified.current) return;
     notified.current = true;
-    props.onApplied?.();
-  }, [status?.providerId, props]);
+    onAppliedRef.current?.();
+  }, [status?.providerId]);
 
   useEffect(() => {
     if (status?.phase !== "waiting_login") {
@@ -75,7 +83,7 @@ export function DsFreeLoginPanel(props: { onError: (message: string) => void; on
       await action();
       await refresh();
     } catch (error) {
-      props.onError((error as Error).message);
+      onErrorRef.current((error as Error).message);
     } finally {
       setBusy(false);
     }
@@ -89,7 +97,7 @@ export function DsFreeLoginPanel(props: { onError: (message: string) => void; on
       const next = await api.dsFreeStart(binaryPath.trim().length === 0 ? {} : { binaryPath: binaryPath.trim() });
       setStatus(next);
     } catch (error) {
-      props.onError((error as Error).message);
+      onErrorRef.current((error as Error).message);
     } finally {
       setBusy(false);
     }
@@ -108,9 +116,9 @@ export function DsFreeLoginPanel(props: { onError: (message: string) => void; on
       setDeepseekPassword("");
       setAdminPassword("");
       await refresh();
-      props.onApplied?.();
+      onAppliedRef.current?.();
     } catch (error) {
-      props.onError((error as Error).message);
+      onErrorRef.current((error as Error).message);
     } finally {
       setBusy(false);
     }

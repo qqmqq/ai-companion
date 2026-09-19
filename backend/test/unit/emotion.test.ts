@@ -53,7 +53,11 @@ function stack(modelReplies: string[] = []) {
     refreshModelInfo: async () => [],
   };
   const taskLLM = createTaskLLM({
-    router: { resolve: (task: TaskType) => ({ taskType: task, providerId: "fake", model: "fake-model" }), listRoutes: () => [] },
+    router: {
+      resolve: (task: TaskType) => ({ taskType: task, providerId: "fake", model: "fake-model" }),
+      resolveOrNull: (task: TaskType) => ({ taskType: task, providerId: "fake", model: "fake-model" }),
+      listRoutes: () => [],
+    },
     providers: registry,
     usage: createModelUsageRepository(db),
     logger,
