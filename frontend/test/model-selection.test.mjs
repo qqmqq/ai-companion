@@ -37,6 +37,8 @@ function provider(id, defaultModel) {
 /** 假后端：形状与真实 API 一致（providers / model-routing / usage / providers/:id/test / PUT model-routing） */
 function installApi(options = {}) {
   const state = {
+    providers: options.emptyWorld === true ? [] : [provider("p1", "p1-default"), provider("p2", "p2-default")],
+    deleted: [],
     putBodies: [],
     modelLists: options.modelLists ?? {
       p1: [{ id: "model-A", displayName: "Model A" }, { id: "model-B", displayName: "Model B" }, { id: "model-C", displayName: "Model C" }],
@@ -49,14 +51,20 @@ function installApi(options = {}) {
     const url = String(input);
     const path = url.split("?")[0];
     const method = (init.method ?? "GET").toUpperCase();
-    if (path.endsWith("/api/providers") && method === "GET") {
-      // 空世界 = 用户把 provider 全删了：这时后端返回空列表，路由项 resolved 为 null
-      return json({ items: options.emptyWorld === true ? [] : [provider("p1", "p1-default"), provider("p2", "p2-default")] });
+    if (path.endsWith("/api/providers") && method === "GET") return json({ items: state.providers });
+    const deleteMatch = /\/api\/providers\/([^/]+)$/.exec(path);
+    if (deleteMatch !== null && method === "DELETE") {
+      const id = decodeURIComponent(deleteMatch[1]);
+      state.deleted.push(id);
+      state.providers = state.providers.filter((entry) => entry.id !== id);
+      return new Response(null, { status: 204 });
     }
     if (path.endsWith("/api/usage")) return json({ since: "x", summary: [], recent: [] });
     // 设置页里嵌了「接入助手」，它挂载时会问一次状态
     if (path.endsWith("/api/integrations/ds-free/status")) return json({ phase: "idle", preparing: false, deviceId: null, pageState: null, pageHint: "", browser: null, debugPort: null, browserClosed: null, signInUrl: "", proxyBaseUrl: "", proxyReachable: false, proxyStarted: null, proxyNote: "", proxyProjectUrl: "", binaryPath: null, providerId: null, providerNote: "", lastError: null });
     if (path.endsWith("/api/model-routing") && method === "GET") {
+      // 用来复现"路由接口挂了导致整次刷新作废、删掉的 Provider 留在页面上"
+      if (options.routingFails === true) return json({ error: { message: "路由接口挂了" } }, 500);
       if (options.emptyWorld === true) {
         return json({
           items: TASKS.map((taskType) => ({
@@ -220,6 +228,23 @@ test("Test 7：切换 Provider 时，旧 Provider 的模型不会被错误保留
   const value = modelSelect(row)?.value ?? "";
   assert.notEqual(value, "model-B", "换成 p2 之后绝不能还留着 p1 的 model-B");
   assert.ok(value === "p2-model-1" || value === "p2-default", "应当切到 p2 的候选/默认模型，实际 " + value);
+  await act(async () => { root.unmount(); });
+});
+
+test("Test 10：删掉 Provider 立刻从列表消失，不用刷新页面（别的接口报错也不能挡住）", async () => {
+  const api = installApi({ routingFails: true });
+  const root = await mount();
+  assert.match(dom.window.document.getElementById("root").textContent ?? "", /Provider p1/);
+
+  const row = [...dom.window.document.querySelectorAll("li")].find((li) => (li.textContent ?? "").includes("Provider p1"));
+  assert.ok(row !== undefined);
+  const remove = [...row.querySelectorAll("button")].find((node) => (node.textContent ?? "").includes("删除"));
+  await click(remove);
+
+  assert.deepEqual(api.deleted, ["p1"]);
+  const text = dom.window.document.getElementById("root").textContent ?? "";
+  assert.equal(text.includes("Provider p1"), false, "删完就该从页面上消失，不该等用户手动刷新");
+  assert.match(text, /Provider p2/, "别的 Provider 要留着");
   await act(async () => { root.unmount(); });
 });
 

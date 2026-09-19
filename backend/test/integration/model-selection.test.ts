@@ -198,6 +198,45 @@ test("模型发现失败时仍然可以手填模型，并且手填的值会真�
   }
 });
 
+test("Provider 没密钥 / 被停用时，模型列表接口要说清怎么解决，而不是丢一句术语", async () => {
+  const ctx = await setup();
+  try {
+    // 没密钥
+    await post(ctx, "/api/providers", {
+      id: "needs-key",
+      kind: "openai-compatible",
+      displayName: "需要密钥的",
+      baseUrl: "http://127.0.0.1:22217",
+      defaultModel: "m",
+      requiresCredential: true,
+    });
+    const noKey = await (await post(ctx, "/api/providers/needs-key/test", {})).json() as { ok: boolean; error?: { kind?: string; message?: string } };
+    assert.equal(noKey.ok, false);
+    assert.match(noKey.error?.message ?? "", /还没有密钥/, "要告诉用户去哪儿补密钥：" + JSON.stringify(noKey));
+
+    // 有密钥但被停用
+    await post(ctx, "/api/providers", {
+      id: "disabled-one",
+      kind: "openai-compatible",
+      displayName: "被停用的",
+      baseUrl: "http://127.0.0.1:9",
+      defaultModel: "m",
+      requiresCredential: false,
+      enabled: false,
+    });
+    const off = await (await post(ctx, "/api/providers/disabled-one/test", {})).json() as { ok: boolean; error?: { message?: string } };
+    assert.equal(off.ok, false);
+    assert.match(off.error?.message ?? "", /停用/, "要告诉用户它是停用的：" + JSON.stringify(off));
+
+    // 不存在的 provider 也要说人话
+    const missing = await (await post(ctx, "/api/providers/never-existed/test", {})).json() as { ok: boolean; error?: { message?: string } };
+    assert.equal(missing.ok, false);
+    assert.match(missing.error?.message ?? "", /没有这条 Provider/);
+  } finally {
+    await ctx.close();
+  }
+});
+
 test("一个能用的模型都没有时：路由列表不报错，而是给出原因（真实踩过：整页 500）", async () => {
   const ctx = await setup();
   try {

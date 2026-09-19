@@ -225,7 +225,8 @@ export function createDsFreeLoginService(deps: DsFreeLoginServiceDeps) {
         baseUrl: proxyBaseUrl,
         defaultModel: DS_FREE_MODEL,
       });
-      providerNote = "已把模型 " + DS_FREE_MODEL + " 加入「已配置的模型」；密钥在你点一键写入时补齐";
+      providerNote =
+        "已把模型 " + DS_FREE_MODEL + " 加入「已配置的模型」（先处于停用状态，不会参与调用）；填好下面三样点「一键写入」，它会自动补上密钥并启用。";
       deps.logger.info("ds-free model registered after capture", { step: "dsfree.provider", status: "completed" });
     } catch (error) {
       providerNote = "自动收尾没做完：" + (error as Error).message;

@@ -192,12 +192,24 @@ export function SettingsPage(props: { onError: (message: string) => void }) {
   const [discovering, setDiscovering] = useState(false);
   const [discoverNote, setDiscoverNote] = useState<string | null>(null);
 
+  /**
+   * 三段各自兜错，不用 Promise.all：
+   * 以前任何一段失败（比如路由接口报错）整次刷新就作废，删掉的 Provider 会一直留在页面上，
+   * 必须手动刷新页面才消失 —— 真实踩过。
+   */
   const refresh = async () => {
     try {
-      const [nextProviders, nextRouting, nextUsage] = await Promise.all([api.providers(), api.routing(), api.usage()]);
-      setProviders(nextProviders);
-      setRouting(nextRouting);
-      setUsage({ summary: nextUsage.summary });
+      setProviders(await api.providers());
+    } catch (error) {
+      props.onError((error as Error).message);
+    }
+    try {
+      setRouting(await api.routing());
+    } catch (error) {
+      props.onError((error as Error).message);
+    }
+    try {
+      setUsage({ summary: (await api.usage()).summary });
     } catch (error) {
       props.onError((error as Error).message);
     }
@@ -350,6 +362,13 @@ export function SettingsPage(props: { onError: (message: string) => void }) {
               <span>{provider.requiresCredential ? (provider.hasCredential ? "已配置密钥" : "缺少密钥") : "无需密钥"}</span>
               {!provider.enabled && <span className="warn">已停用</span>}
             </div>
+            {(!provider.enabled || (provider.requiresCredential && !provider.hasCredential)) && (
+              <p className="warn">
+                {provider.requiresCredential && !provider.hasCredential
+                  ? "这条还没有密钥，现在不会被用来干活：在「接入助手」里点一次「一键写入」，或编辑它填上 API Key。"
+                  : "这条已停用，不会参与任何调用：编辑它保存一次即可重新启用。"}
+              </p>
+            )}
             {models[provider.id] !== undefined && models[provider.id]!.length > 0 && (
               <div className="meta">
                 <span>

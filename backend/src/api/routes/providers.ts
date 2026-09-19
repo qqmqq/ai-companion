@@ -110,9 +110,39 @@ export function registerProviderRoutes(app: FastifyInstance, container: Containe
     return null;
   });
 
-  /** 连通性测试：只返回模型清单，不返回任何凭据信息。 */
+  /**
+   * 连通性测试：只返回模型清单，不返回任何凭据信息。
+   * 注册表只会说"未注册"（它不知道原因），所以先在这里按配置说人话：
+   * 停用 / 缺密钥 都是用户能自己解决的事，别让人对着一句术语发懵。
+   */
   app.post("/api/providers/:id/test", async (request) => {
     const { id } = request.params as { id: string };
+    const config = container.repos.providerConfig.get(id);
+    if (config === null) {
+      return { ok: false, error: { kind: "model_unavailable", message: `没有这条 Provider：${id}`, retryable: false }, models: [] };
+    }
+    if (!config.enabled) {
+      return {
+        ok: false,
+        error: {
+          kind: "model_unavailable",
+          message: "这条 Provider 现在是停用的，不会参与任何调用：补上密钥（或编辑保存一次打开它）之后再获取模型列表。",
+          retryable: false,
+        },
+        models: [],
+      };
+    }
+    if (config.requiresCredential && (config.credentialRef === null || !(await container.credentials.hasSecret(config.credentialRef)))) {
+      return {
+        ok: false,
+        error: {
+          kind: "missing_credential",
+          message: "这条 Provider 还没有密钥：先在「接入助手」里点一次「一键写入」，或编辑它填上 API Key。",
+          retryable: false,
+        },
+        models: [],
+      };
+    }
     try {
       const models = await container.providers.refreshModelInfo(id);
       return { ok: true, models: models.map((m) => ({ id: m.id, displayName: m.displayName, capabilities: m.capabilities })) };
