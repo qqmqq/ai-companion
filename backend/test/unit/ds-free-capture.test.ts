@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { DEVICE_ID_EXPRESSION, PAGE_STATE_EXPRESSION, describePageState, extractDeviceId, parsePageState } from "../../src/integrations/ds-free/capture.ts";
+import { toAccountIdentity } from "../../src/integrations/ds-free/admin-client.ts";
 
 test("设备指纹：从页面拿到的值要能原样收下，空值/占位值一律当没拿到", () => {
   assert.equal(extractDeviceId("0123456789abcdef0123456789abcdef"), "0123456789abcdef0123456789abcdef");
@@ -13,6 +14,17 @@ test("设备指纹：从页面拿到的值要能原样收下，空值/占位值�
   assert.equal(extractDeviceId("too-short"), null);
   assert.equal(extractDeviceId({ smid: "x" }), null);
   assert.equal(extractDeviceId("x".repeat(600)), null);
+});
+
+test("账号字段：邮箱填 email，手机号填 mobile + area_code（真实事故：手机号被当邮箱写进去）", () => {
+  assert.deepEqual(toAccountIdentity("someone@example.com"), { email: "someone@example.com", mobile: "", area_code: "" });
+  assert.deepEqual(toAccountIdentity("  13800138000  "), { email: "", mobile: "13800138000", area_code: "86" });
+  assert.deepEqual(toAccountIdentity("138-0013-8000"), { email: "", mobile: "13800138000", area_code: "86" });
+  assert.deepEqual(toAccountIdentity("+8613800138000"), { email: "", mobile: "13800138000", area_code: "86" });
+  assert.deepEqual(toAccountIdentity("008613800138000"), { email: "", mobile: "13800138000", area_code: "86" });
+  // 不是手机号的照旧当邮箱，别乱猜
+  assert.deepEqual(toAccountIdentity("12345"), { email: "12345", mobile: "", area_code: "" });
+  assert.deepEqual(toAccountIdentity("1380013800"), { email: "1380013800", mobile: "", area_code: "" });
 });
 
 test("页面状态：字段缺了也不能变成 undefined", () => {

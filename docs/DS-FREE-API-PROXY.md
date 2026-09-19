@@ -71,13 +71,17 @@ docker compose -f docker/docker-compose.yaml up -d
    - **自动把模型加进「已配置的模型」**：建好 provider `ds-free-proxy`（`baseUrl = http://127.0.0.1:22217`，模型 `deepseek-default`）。
      这一步先不写密钥（那时还不知道），所以它会**先处于停用状态** —— 免得任务被路由到一条打不通的 provider 上；
      点「一键写入」补上密钥时会自动启用。
-3. 回到本页填三样：DeepSeek 账号（邮箱）、DeepSeek 密码、**反代管理密码**（`/admin` 的密码；没设过就用你填的这个设上）。
+3. 回到本页填三样：DeepSeek 账号（**邮箱或手机号都行**）、DeepSeek 密码、**反代管理密码**（`/admin` 的密码；没设过就用你填的这个设上）。
+   - 手机号账号会自动写成反代要的 `mobile` + `area_code`；填错字段会被反代当成用户名错误（`PASSWORD_OR_USER_NAME_IS_WRONG`），
+     表现却是"生成超时"—— 所以这里替你分清楚了。之前错写进 `email` 的那条会在下次写入时就地改掉，不留僵尸账号。
 4. 点 **一键写入并配好 provider**，本程序会：
    - 登录（或首次设置）反代管理面板；
    - 把账号（邮箱 + 密码 + `device_id`）写进反代账号池；
    - 在反代里创建一把本程序专用的 API Key（描述为「AI Companion（本机）」）；
    - 写入反代配置并让它热重载；
-   - 把密钥补到那条 provider 上（密钥只进本机加密库，界面只回掩码）。
+   - 把密钥补到那条 provider 上（密钥只进本机加密库，界面只回掩码）；
+   - **当场真打一次请求**（只生成 1 个 token）验证账号能不能用：通了写「已实测一次真实请求：通」，
+     不通就把原因原样写出来（账号密码不对 / 账号池无可用账号 / 限流）—— 不用等你聊天时撞上一句"超时"。
 5. 完成后去「任务用哪个模型」把要用的任务指到它。
 
 > 反代程序本身是开源项目 [NIyueeE/ds-free-api](https://github.com/NIyueeE/ds-free-api)（GPL-3.0）。
@@ -142,6 +146,8 @@ docker compose -f docker/docker-compose.yaml up -d
 | WIRING_VERIFIED | VERIFIED —— 真机：provider → 反代 `/v1/models` 打通，上游 401 如实上报 |
 | REAL_PAGE_CAPTURE | VERIFIED —— 本机 Chrome 打真实登录页，设备指纹成功取出 |
 | ADMIN_PROTOCOL | VERIFIED —— 对真实 v0.2.11 进程完成「首次设密码 → 写账号+Key → 读回 → 生成的 Key 能调 /v1/models」 |
+| ACCOUNT_KIND | VERIFIED —— 邮箱/手机号分别写成 `email` 与 `mobile`+`area_code`（单测 7 例 + 集成用例）；被错写进 `email` 的手机号会就地改掉 |
+| POST_WRITE_CHECK | VERIFIED —— 一键写入后当场真发一次请求，通/不通直接写在界面上 |
 | AUTO_FINISH | VERIFIED —— 抓完自动关窗、自动拉起反代、自动把模型加进「已配置的模型」（真机实测） |
 | END_TO_END_PENDING | PENDING —— 你填自己的 DeepSeek 账号后点一次「一键写入」即可闭环 |
 | NO_CODE_COPIED | VERIFIED —— 只调用 HTTP 接口，未复制/链接 GPL-3.0 代码 |

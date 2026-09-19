@@ -1,9 +1,40 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { DS_FREE_DEFAULT_BASE_URL, DS_FREE_MODEL, DS_FREE_PROVIDER_ID, pickProviderTarget, providerEnabledAfterRegister } from "../../src/integrations/ds-free/service.ts";
+import { createDsFreeAdminClient, toAccountIdentity, type DsFreeConfig } from "../../src/integrations/ds-free/admin-client.ts";
 import { DS_FREE_PROJECT_URL } from "../../src/integrations/ds-free/proxy-process.ts";
 
 const PROXY = "http://127.0.0.1:22217";
+
+test("账号认人：手机号账号会把「手机号曾被错写进 email」的那条就地改掉，不留僵尸账号", () => {
+  const logger = { debug() {}, info() {}, warn() {}, error() {}, child() { return this; } } as never;
+  const client = createDsFreeAdminClient({ baseUrl: "http://127.0.0.1:1", logger });
+  // 旧状态：手机号被当成邮箱写进去了（真实踩过，反代一直登录失败）
+  const broken: DsFreeConfig = {
+    ds_core: { accounts: [{ email: "13800138000", mobile: "", area_code: "", password: "old", device_id: "d1" }] },
+    api_keys: [],
+  };
+  const identity = toAccountIdentity("13800138000");
+  const fixed = client.addAccount(broken, { ...identity, password: "new", device_id: "d2" });
+  assert.equal(fixed.added, false, "应认出是同一个人，而不是再加一条");
+  assert.equal(fixed.config.ds_core?.accounts?.length, 1);
+  const account = fixed.config.ds_core?.accounts?.[0];
+  assert.equal(account?.email, "");
+  assert.equal(account?.mobile, "13800138000");
+  assert.equal(account?.area_code, "86");
+  assert.equal(account?.password, "new");
+  assert.equal(account?.device_id, "d2");
+});
+
+test("账号认人：不同邮箱/不同手机号各自是一条", () => {
+  const logger = { debug() {}, info() {}, warn() {}, error() {}, child() { return this; } } as never;
+  const client = createDsFreeAdminClient({ baseUrl: "http://127.0.0.1:1", logger });
+  const start: DsFreeConfig = { ds_core: { accounts: [] }, api_keys: [] };
+  const one = client.addAccount(start, { email: "a@example.com", mobile: "", area_code: "", password: "p", device_id: "d" });
+  const two = client.addAccount(one.config, { email: "", mobile: "13900139000", area_code: "86", password: "p", device_id: "d" });
+  assert.equal(two.added, true);
+  assert.equal(two.config.ds_core?.accounts?.length, 2);
+});
 
 test("自动登记模型时还没有密钥就先停用：否则任务会被路由到一条打不通的 provider 上", () => {
   // 新建 + 没密钥 → 停用（一键写入补上密钥后才打开）

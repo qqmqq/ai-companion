@@ -126,10 +126,18 @@ export function createDsFreeAdminClient(deps: DsFreeAdminDeps) {
       await request<unknown>("/admin/api/config", { method: "PUT", token, body: config });
     },
 
-    /** 账号池里没有就加一个（同一个邮箱视为同一个账号，只补 device_id） */
+    /**
+     * 账号池里没有就加一个；同一个账号只更新，不重复添加。
+     * 认人规则：邮箱对邮箱，手机号对手机号 —— **并且**把"手机号曾被错写进 email"的那条认出来就地改掉，
+     * 否则改对一次会在池子里留下一条永远登录失败的僵尸账号。
+     */
     addAccount(config: DsFreeConfig, account: DsFreeAccount): { config: DsFreeConfig; added: boolean; deviceIdFilled: boolean } {
       const accounts = config.ds_core?.accounts ?? [];
-      const index = accounts.findIndex((item) => item.email.length > 0 && item.email === account.email);
+      const index = accounts.findIndex((item) => {
+        if (account.email.length > 0 && item.email === account.email) return true;
+        if (account.mobile.length === 0) return false;
+        return item.mobile === account.mobile || item.email === account.mobile;
+      });
       if (index >= 0) {
         const existing = accounts[index] as DsFreeAccount;
         const deviceIdFilled = existing.device_id.length === 0 && account.device_id.length > 0;
@@ -150,6 +158,18 @@ export function createDsFreeAdminClient(deps: DsFreeAdminDeps) {
 }
 
 export type DsFreeAdminClient = ReturnType<typeof createDsFreeAdminClient>;
+
+/**
+ * 把用户填的「账号」拆成反代要的字段：邮箱账号填 email，手机号账号填 mobile + area_code。
+ * 真实踩过：手机号被当成邮箱写进去，反代登录直接 PASSWORD_OR_USER_NAME_IS_WRONG，
+ * 页面上只看到"生成超时"，查了半天。所以这里必须先分清。
+ */
+export function toAccountIdentity(raw: string): { email: string; mobile: string; area_code: string } {
+  const value = raw.trim().replace(/[\s-]/g, "");
+  const phone = /^(?:\+?86|0086)?(1\d{10})$/.exec(value);
+  if (phone !== null) return { email: "", mobile: phone[1] ?? "", area_code: "86" };
+  return { email: value, mobile: "", area_code: "" };
+}
 
 /** 生成一个本程序用的反代密钥（只用于本机，前缀便于识别） */
 export function generateProxyKey(randomHex: () => string): string {

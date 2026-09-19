@@ -27,7 +27,7 @@ import {
   type CdpTarget,
 } from "./browser.ts";
 import { DEVICE_ID_EXPRESSION, PAGE_STATE_EXPRESSION, describePageState, extractDeviceId, parsePageState, type PageState } from "./capture.ts";
-import { createDsFreeAdminClient, generateProxyKey, maskKey, type DsFreeAdminClient } from "./admin-client.ts";
+import { createDsFreeAdminClient, generateProxyKey, maskKey, toAccountIdentity, type DsFreeAdminClient } from "./admin-client.ts";
 import { createDsFreeProxyProcess, DS_FREE_PROJECT_URL } from "./proxy-process.ts";
 
 export const DS_FREE_DEFAULT_BASE_URL = "http://127.0.0.1:22217";
@@ -236,6 +236,38 @@ export function createDsFreeLoginService(deps: DsFreeLoginServiceDeps) {
     }
   }
 
+  /**
+   * 用刚写好的密钥真打一次请求，把"能不能用"当场问清楚。
+   * 只生成 1 个 token，失败原因（账号密码错、账号池空、限流）原样带回来。
+   */
+  async function verifyThroughProxy(baseUrl: string, apiKey: string): Promise<{ ok: boolean; reason: string }> {
+    try {
+      const response = await doFetch(baseUrl + "/v1/chat/completions", {
+        method: "POST",
+        headers: { "content-type": "application/json", authorization: "Bearer " + apiKey },
+        body: JSON.stringify({
+          model: DS_FREE_MODEL,
+          messages: [{ role: "user", content: "你好" }],
+          max_tokens: 1,
+          stream: false,
+        }),
+        signal: AbortSignal.timeout(60_000),
+      });
+      if (response.ok) return { ok: true, reason: "" };
+      const text = (await response.text()).slice(0, 300);
+      let message = text;
+      try {
+        const parsed = JSON.parse(text) as { error?: { message?: string }; message?: string };
+        message = parsed.error?.message ?? parsed.message ?? text;
+      } catch {
+        // 不是 JSON 就原样
+      }
+      return { ok: false, reason: "HTTP " + String(response.status) + " " + message };
+    } catch (error) {
+      return { ok: false, reason: (error as Error).message };
+    }
+  }
+
   /** 轮询页面：读到设备指纹就收工；浏览器一直起不来或超时就如实报错 */
   async function poll(port: number, deadline: number): Promise<void> {
     while (polling && deviceId === null && Date.now() < deadline) {
@@ -357,6 +389,8 @@ export function createDsFreeLoginService(deps: DsFreeLoginServiceDeps) {
       accountAdded: boolean;
       deviceIdAttached: boolean;
       adminPasswordCreated: boolean;
+      /** 写完当场跑一次真实请求的结果（不通时 reason 就是原因） */
+      verify: { ok: boolean; reason: string };
       steps: string[];
     }> {
       const baseUrl = (input.proxyBaseUrl ?? proxyBaseUrl).trim().replace(/[/]+$/, "");
@@ -364,7 +398,7 @@ export function createDsFreeLoginService(deps: DsFreeLoginServiceDeps) {
       if (deviceId === null) {
         throw new DomainError("invalid_input", "还没拿到设备指纹：先点「打开登录页并自动获取」，等浏览器里页面加载完（最好完成一次登录）。");
       }
-      if (input.email.trim().length === 0) throw new DomainError("invalid_input", "请填 DeepSeek 账号邮箱");
+      if (input.email.trim().length === 0) throw new DomainError("invalid_input", "请填 DeepSeek 账号（邮箱或手机号）");
       if (input.deepseekPassword.length === 0) throw new DomainError("invalid_input", "请填 DeepSeek 账号密码");
       if (input.adminPassword.length < 6) throw new DomainError("invalid_input", "反代管理密码至少 6 位（没设置过就会用它设上）");
 
@@ -389,14 +423,17 @@ export function createDsFreeLoginService(deps: DsFreeLoginServiceDeps) {
       }
 
       const current = await admin.getConfig(token);
+      // 手机号账号要写成 mobile + area_code，写成 email 会被反代当成用户名错误
+      const identity = toAccountIdentity(input.email);
+      const kindLabel = identity.mobile.length > 0 ? "手机号" : "邮箱";
       const withAccount = admin.addAccount(current, {
-        email: input.email.trim(),
-        mobile: "",
-        area_code: "",
+        email: identity.email,
+        mobile: identity.mobile,
+        area_code: identity.area_code,
         password: input.deepseekPassword,
         device_id: deviceId,
       });
-      steps.push(withAccount.added ? "已把 DeepSeek 账号加入反代账号池" : "账号已存在，已更新密码与设备指纹");
+      steps.push(withAccount.added ? "已把 DeepSeek 账号（" + kindLabel + "）加入反代账号池" : "账号（" + kindLabel + "）已存在，已更新密码与设备指纹");
 
       const existingKey = (withAccount.config.api_keys ?? []).find((item) => item.description === API_KEY_DESCRIPTION);
       const apiKey = existingKey?.key ?? generateProxyKey(deps.randomKey ?? defaultRandomHex);
@@ -415,6 +452,11 @@ export function createDsFreeLoginService(deps: DsFreeLoginServiceDeps) {
       });
       providerId = writtenId;
       steps.push("已在「模型设置」里配好 provider：" + writtenId + "（下一步把任务指向它即可）");
+
+      // 写完就**当场试一次真实请求**：账号密码不对 / 账号池空 这类问题，
+      // 必须在这一次点击里说清楚，而不是等你聊天时看到一句"生成超时"。
+      const verify = await verifyThroughProxy(baseUrl, apiKey);
+      steps.push(verify.ok ? "已实测一次真实请求：通" : "已实测一次真实请求：不通 —— " + verify.reason);
       deps.logger.info("ds-free onboarding finished", { step: "dsfree.apply", status: "completed", accountAdded: withAccount.added });
 
       return {
@@ -425,6 +467,7 @@ export function createDsFreeLoginService(deps: DsFreeLoginServiceDeps) {
         accountAdded: withAccount.added,
         deviceIdAttached: withAccount.deviceIdFilled,
         adminPasswordCreated,
+        verify,
         steps,
       };
     },

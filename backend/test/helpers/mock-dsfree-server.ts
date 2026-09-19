@@ -23,6 +23,9 @@ export interface MockDsFreeServer {
   loginCount: number;
   /** 反代在不在：用来模拟「还没启动 → 我们替它启动 → 它起来了」 */
   setReachable(value: boolean): void;
+  /** 真实请求（/v1/chat/completions）的结果：用来测「写完当场验一次」 */
+  setChatOutcome(value: { status: number; body: unknown }): void;
+  chatCalls: number;
   close(): Promise<void>;
 }
 
@@ -43,6 +46,7 @@ function json(response: ServerResponse, status: number, body: unknown): void {
 export async function startMockDsFreeServer(options: { adminPassword?: string | null; seedConfig?: Record<string, unknown> } = {}): Promise<MockDsFreeServer> {
   let adminPassword = options.adminPassword ?? null;
   let reachable = true;
+  let chatOutcome: { status: number; body: unknown } = { status: 200, body: { choices: [{ message: { role: "assistant", content: "好" } }] } };
   const token = "test-admin-token";
   const state: MockDsFreeServer = {
     baseUrl: "",
@@ -55,6 +59,10 @@ export async function startMockDsFreeServer(options: { adminPassword?: string | 
     setReachable: (value: boolean) => {
       reachable = value;
     },
+    setChatOutcome: (value: { status: number; body: unknown }) => {
+      chatOutcome = value;
+    },
+    chatCalls: 0,
     close: async () => {},
   };
 
@@ -62,6 +70,12 @@ export async function startMockDsFreeServer(options: { adminPassword?: string | 
     void (async () => {
       const url = request.url ?? "/";
       const method = request.method ?? "GET";
+      if (method === "POST" && url === "/v1/chat/completions") {
+        await readBody(request);
+        state.chatCalls += 1;
+        json(response, chatOutcome.status, chatOutcome.body);
+        return;
+      }
       if (method === "GET" && url === "/health") {
         if (!reachable) {
           json(response, 503, { error: { message: "not ready" } });

@@ -71,7 +71,7 @@ function capturedBody(overrides = {}) {
   });
 }
 
-function installApi(initial) {
+function installApi(initial, options = {}) {
   const state = { status: initial, starts: [], applies: [], stops: 0 };
   globalThis.fetch = async (input, init = {}) => {
     const path = String(input).split("?")[0];
@@ -97,6 +97,7 @@ function installApi(initial) {
         accountAdded: true,
         deviceIdAttached: true,
         adminPasswordCreated: true,
+        verify: options.verify ?? { ok: true, reason: "" },
         steps: ["已把 DeepSeek 账号加入反代账号池", "已在反代里创建本程序专用的 API Key"],
       });
     }
@@ -203,7 +204,7 @@ test("一键写入：密码原样交给后端，用完立刻清空，界面只�
   const state = installApi(capturedBody());
   const { root } = await mount();
   await act(async () => {
-    setValue(inputByPlaceholder("DeepSeek 登录邮箱"), "someone@example.com");
+    setValue(inputByPlaceholder("登录邮箱"), "someone@example.com");
     setValue(inputByPlaceholder("只用于这一次写入"), "deepseek-password");
     setValue(inputByPlaceholder("管理面板的密码"), "admin-password");
   });
@@ -212,12 +213,29 @@ test("一键写入：密码原样交给后端，用完立刻清空，界面只�
   await settle();
 
   assert.deepEqual(state.applies, [{ email: "someone@example.com", deepseekPassword: "deepseek-password", adminPassword: "admin-password" }]);
+  assert.match(text(), /已实测一次真实请求：通/, "当场验过才敢说可用");
   assert.equal(inputByPlaceholder("只用于这一次写入")?.value, "", "密码提交后要清空");
   assert.equal(inputByPlaceholder("管理面板的密码")?.value, "", "管理密码提交后要清空");
   assert.equal(text().includes("deepseek-password"), false, "页面上不该出现密码");
   assert.equal(text().includes("admin-password"), false, "页面上不该出现管理密码");
   assert.match(text(), /sk-dsfree-01…cdef/, "只显示掩码");
   assert.match(text(), /已在反代里创建本程序专用的 API Key/);
+  await act(async () => { root.unmount(); });
+});
+
+test("账号那一栏要收手机号；验不通时把原因写在页面上，而不是让你聊天时看超时", async () => {
+  installApi(capturedBody(), { verify: { ok: false, reason: "HTTP 503 账号池无可用账号" } });
+  const { root } = await mount();
+  await act(async () => {
+    setValue(inputByPlaceholder("11 位手机号"), "13800138000");
+    setValue(inputByPlaceholder("只用于这一次写入"), "p");
+    setValue(inputByPlaceholder("管理面板的密码"), "admin-password");
+  });
+  await settle(2);
+  await act(async () => { button("一键写入并配好 provider").dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true })); });
+  await settle();
+  assert.match(text(), /已实测一次真实请求：不通/);
+  assert.match(text(), /账号池无可用账号/);
   await act(async () => { root.unmount(); });
 });
 

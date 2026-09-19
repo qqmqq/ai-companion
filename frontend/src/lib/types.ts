@@ -364,6 +364,8 @@ export interface DsFreeApplyResultDto {
   accountAdded: boolean;
   deviceIdAttached: boolean;
   adminPasswordCreated: boolean;
+  /** 写完当场跑一次真实请求的结果 */
+  verify: { ok: boolean; reason: string };
   steps: string[];
 }
 

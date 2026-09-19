@@ -201,8 +201,8 @@ export function DsFreeLoginPanel(props: { onError: (message: string) => void; on
 
       <div className="grid">
         <label>
-          DeepSeek 账号（邮箱）
-          <input value={email} onChange={(event) => setEmail(event.target.value)} placeholder="你的 DeepSeek 登录邮箱" autoComplete="off" />
+          DeepSeek 账号（邮箱或手机号）
+          <input value={email} onChange={(event) => setEmail(event.target.value)} placeholder="登录邮箱，或 11 位手机号" autoComplete="off" />
         </label>
         <label>
           DeepSeek 密码
@@ -234,6 +234,12 @@ export function DsFreeLoginPanel(props: { onError: (message: string) => void; on
         <div>
           <p className="ok-text">
             已配好：{result.providerId}（密钥 {result.apiKeyMasked}）。接下来去「任务用哪个模型」把要用的任务指到它。
+          </p>
+          {/* 当场验过才敢说可用：账号密码不对 / 账号池空 都会在这里露出来 */}
+          <p className={result.verify.ok ? "ok-text" : "warn"}>
+            {result.verify.ok
+              ? "已实测一次真实请求：通，现在可以用了。"
+              : "已实测一次真实请求：不通 —— " + result.verify.reason + "（多半是账号/密码不对，或这个账号还没在 DeepSeek 网页端登录过）"}
           </p>
           <ul className="hint">
             {result.steps.map((step, index) => (

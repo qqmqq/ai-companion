@@ -164,10 +164,16 @@ test("接入助手：打开真实网页 → 自动拿到设备指纹 → 自动�
     // 反代账号池里：邮箱 + 密码 + 设备指纹，一个都不能少
     assert.equal(proxy.accountsWritten.length, 1);
     assert.equal(proxy.accountsWritten[0]?.email, "someone@example.com");
+    assert.equal(proxy.accountsWritten[0]?.mobile, "", "邮箱账号不该写进 mobile");
     assert.equal(proxy.accountsWritten[0]?.password, "deepseek-password");
     assert.equal(proxy.accountsWritten[0]?.device_id, DEVICE_ID);
     assert.equal(proxy.apiKeysWritten.length, 1);
     assert.equal(proxy.apiKeysWritten[0]?.description, "AI Companion（本机）");
+
+    // 写完当场验一次真实请求：通了就说通
+    assert.equal(proxy.chatCalls, 1);
+    assert.equal(result.verify.ok, true);
+    assert.ok(result.steps.some((step) => step.includes("已实测一次真实请求：通")));
 
     // 一键写入把密钥补到同一条 provider 上；baseUrl 不带 /v1（代码自己会拼）
     assert.equal(written.length, 2);
@@ -178,6 +184,45 @@ test("接入助手：打开真实网页 → 自动拿到设备指纹 → 自动�
     assert.ok(!result.apiKeyMasked.includes(written[1]?.apiKey ?? ""));
     assert.ok(result.apiKeyMasked.length < (written[1]?.apiKey ?? "").length);
     assert.ok(result.steps.length >= 4);
+  } finally {
+    await proxy.close();
+  }
+});
+
+test("接入助手：用手机号登录时写成 mobile + area_code（写成 email 会 PASSWORD_OR_USER_NAME_IS_WRONG）", async () => {
+  const proxy = await startMockDsFreeServer({ adminPassword: null });
+  try {
+    const browser = fakeBrowserHarness();
+    const proxyProcess = fakeProxyProcess();
+    const service = makeService({ proxyBaseUrl: proxy.baseUrl, browser, proxyProcess, written: [] });
+    await service.start({ proxyBaseUrl: proxy.baseUrl });
+    await waitForCapture(service);
+    const result = await service.apply({ email: " 138-0013-8000 ", deepseekPassword: "p", adminPassword: "admin-password" });
+
+    assert.equal(proxy.accountsWritten[0]?.mobile, "13800138000");
+    assert.equal(proxy.accountsWritten[0]?.area_code, "86");
+    assert.equal(proxy.accountsWritten[0]?.email, "", "手机号不该被塞进 email 字段");
+    assert.ok(result.steps.some((step) => step.includes("手机号")));
+  } finally {
+    await proxy.close();
+  }
+});
+
+test("接入助手：账号密码不对时，这一次点击里就说明白，而不是等你聊天时看到超时", async () => {
+  const proxy = await startMockDsFreeServer({ adminPassword: null });
+  proxy.setChatOutcome({ status: 503, body: { error: { message: "账号池无可用账号" } } });
+  try {
+    const browser = fakeBrowserHarness();
+    const proxyProcess = fakeProxyProcess();
+    const service = makeService({ proxyBaseUrl: proxy.baseUrl, browser, proxyProcess, written: [] });
+    await service.start({ proxyBaseUrl: proxy.baseUrl });
+    await waitForCapture(service);
+    const result = await service.apply({ email: "someone@example.com", deepseekPassword: "wrong", adminPassword: "admin-password" });
+
+    assert.equal(result.ok, true, "配置该写的还是写进去");
+    assert.equal(result.verify.ok, false);
+    assert.match(result.verify.reason, /账号池无可用账号/);
+    assert.ok(result.steps.some((step) => step.includes("已实测一次真实请求：不通")));
   } finally {
     await proxy.close();
   }
