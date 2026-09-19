@@ -29,6 +29,7 @@ import {
 import { DEVICE_ID_EXPRESSION, PAGE_STATE_EXPRESSION, describePageState, extractDeviceId, parsePageState, type PageState } from "./capture.ts";
 import { createDsFreeAdminClient, generateProxyKey, maskKey, toAccountIdentity, type DsFreeAdminClient } from "./admin-client.ts";
 import { createDsFreeProxyProcess, DS_FREE_PROJECT_URL } from "./proxy-process.ts";
+import { readProxyDiagnosis, type ProxyDiagnosis } from "./proxy-log.ts";
 
 export const DS_FREE_DEFAULT_BASE_URL = "http://127.0.0.1:22217";
 export const DS_FREE_SIGN_IN_URL = "https://chat.deepseek.com/sign_in";
@@ -107,6 +108,9 @@ export interface DsFreeLoginServiceDeps {
   waitForPageTargetImpl?: (input: { debugPort: number; fetchImpl?: typeof fetch; timeoutMs?: number; intervalMs?: number }) => Promise<CdpTarget | null>;
   cdpEvaluateImpl?: (input: { webSocketDebuggerUrl: string; expression: string }) => Promise<unknown>;
   closeBrowserImpl?: (input: { debugPort: number }) => Promise<boolean>;
+  /** 读反代日志（诊断用）；测试注入 */
+  readProxyLogImpl?: (path: string) => string;
+  proxyLogExistsImpl?: (path: string) => boolean;
   randomKey?: () => string;
 }
 
@@ -371,6 +375,18 @@ export function createDsFreeLoginService(deps: DsFreeLoginServiceDeps) {
       proxyReachable = await client(proxyBaseUrl).reachable();
       adminPasswordSaved = (await deps.adminPasswordStore?.get()) !== null;
       return snapshot();
+    },
+
+    /**
+     * 「反代怎么了」：读它自己的日志，给一句人话 + 最近几条 WARN/ERROR。
+     * 账号被风控/掉登录时，反代内部一直重试，我们这侧只看到超时 —— 原因只能从它的日志里看出来。
+     */
+    diagnose(): ProxyDiagnosis {
+      return readProxyDiagnosis({
+        dataDir: deps.dataDir,
+        ...(deps.readProxyLogImpl === undefined ? {} : { readImpl: deps.readProxyLogImpl }),
+        ...(deps.proxyLogExistsImpl === undefined ? {} : { existsImpl: deps.proxyLogExistsImpl }),
+      });
     },
 
     stop(): void {

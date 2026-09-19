@@ -73,7 +73,7 @@ function capturedBody(overrides = {}) {
 }
 
 function installApi(initial, options = {}) {
-  const state = { status: initial, starts: [], applies: [], stops: 0 };
+  const state = { status: initial, starts: [], applies: [], stops: 0, diagnoses: 0 };
   globalThis.fetch = async (input, init = {}) => {
     const path = String(input).split("?")[0];
     const method = (init.method ?? "GET").toUpperCase();
@@ -82,6 +82,15 @@ function installApi(initial, options = {}) {
       state.starts.push(JSON.parse(String(init.body ?? "{}")));
       state.status = capturedBody();
       return json(state.status);
+    }
+    if (path.endsWith("/api/integrations/ds-free/diagnose")) {
+      state.diagnoses += 1;
+      return json({
+        ok: false,
+        summary: "反代现在没有可用账号：账号掉登录或被风控了，它只能空转重试，所以我们这边看到的是超时。",
+        lines: ["[2026-09-20T05:15:40 WARN ds_core::accounts] req=req-15 账号池无可用账号"],
+        logPath: "C:/data/ds-free-api/run/logs/runtime.log",
+      });
     }
     if (path.endsWith("/api/integrations/ds-free/stop") && method === "POST") {
       state.stops += 1;
@@ -262,6 +271,21 @@ test("管理密码在本机存过之后：这一栏不再出现，也不再要�
   await settle(2);
   assert.ok(inputByPlaceholder("管理面板的密码") !== undefined, "点了「换一个」就要把输入框放出来");
   assert.equal(button("一键写入并配好 provider").disabled, true, "说要换就得填");
+  await act(async () => { root.unmount(); });
+});
+
+test("「看看反代怎么了」：把反代日志里的真原因翻成人话摆在页面上", async () => {
+  const state = installApi(capturedBody());
+  const { root } = await mount();
+  await act(async () => { button("看看反代怎么了").dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true })); });
+  await settle();
+
+  assert.equal(state.diagnoses, 1);
+  assert.match(text(), /没有可用账号/);
+  assert.match(text(), /空转重试/);
+  assert.match(text(), /账号池无可用账号/, "原始日志行也要能看到");
+  assert.match(text(), /runtime\.log/, "告诉用户日志在哪儿");
+  assert.match(text(), /已打码/);
   await act(async () => { root.unmount(); });
 });
 

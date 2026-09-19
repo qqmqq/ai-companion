@@ -34,6 +34,12 @@ export function registerIntegrationRoutes(app: FastifyInstance, container: Conta
 
   app.get("/api/integrations/ds-free/status", async () => await container.dsFreeLogin.status());
 
+  /**
+   * 「反代怎么了」：读反代自己的日志给一句人话。
+   * 超时只是表象，真正的原因（账号被风控 / 掉登录 / 上游过载）写在它的日志里。
+   */
+  app.get("/api/integrations/ds-free/diagnose", async () => container.dsFreeLogin.diagnose());
+
   app.post("/api/integrations/ds-free/stop", async () => {
     container.dsFreeLogin.stop();
     return await container.dsFreeLogin.status();

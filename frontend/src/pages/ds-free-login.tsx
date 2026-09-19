@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { api } from "../lib/api.ts";
-import type { DsFreeApplyResultDto, DsFreeHelperStatusDto } from "../lib/types.ts";
+import type { DsFreeApplyResultDto, DsFreeDiagnosisDto, DsFreeHelperStatusDto } from "../lib/types.ts";
 
 /** 阶段一律说人话：内部枚举只在这张表里出现，表里没有的也绝不给用户看 undefined */
 const PHASE_LABELS: Record<DsFreeHelperStatusDto["phase"], string> = {
@@ -27,6 +27,7 @@ export function DsFreeLoginPanel(props: { onError: (message: string) => void; on
   const [binaryPath, setBinaryPath] = useState("");
   const [busy, setBusy] = useState(false);
   const [result, setResult] = useState<DsFreeApplyResultDto | null>(null);
+  const [diagnosis, setDiagnosis] = useState<DsFreeDiagnosisDto | null>(null);
   const polling = useRef(false);
   /** 已经在「抓完自动加模型」这一步通知过设置页，避免反复刷新 */
   const notified = useRef(false);
@@ -191,6 +192,10 @@ export function DsFreeLoginPanel(props: { onError: (message: string) => void; on
         <button className="ghost" disabled={busy || status?.phase !== "waiting_login"} onClick={() => void run(() => api.dsFreeStop())}>
           停止等待
         </button>
+        {/* 超时了先看这里：真正的原因写在反代自己的日志里 */}
+        <button className="ghost" disabled={busy} onClick={() => void run(() => api.dsFreeDiagnose().then(setDiagnosis))}>
+          看看反代怎么了
+        </button>
       </div>
 
       {needsBinaryPath && (
@@ -243,6 +248,22 @@ export function DsFreeLoginPanel(props: { onError: (message: string) => void; on
             换一个管理密码
           </button>
         </p>
+      )}
+
+      {diagnosis !== null && (
+        <div>
+          <p className={diagnosis.ok ? "hint" : "warn"}>{diagnosis.summary}</p>
+          {diagnosis.lines.length > 0 && (
+            <ul className="hint">
+              {diagnosis.lines.map((line, index) => (
+                <li key={index}>
+                  <code>{line}</code>
+                </li>
+              ))}
+            </ul>
+          )}
+          <p className="hint">日志：{diagnosis.logPath}（长数字已打码）</p>
+        </div>
       )}
 
       {result !== null && (

@@ -361,6 +361,14 @@ export interface DsFreeHelperStatusDto {
   lastError: string | null;
 }
 
+/** 「反代怎么了」：一句人话 + 最近几条 WARN/ERROR（已打码） */
+export interface DsFreeDiagnosisDto {
+  ok: boolean;
+  summary: string;
+  lines: string[];
+  logPath: string;
+}
+
 export interface DsFreeApplyResultDto {
   ok: boolean;
   providerId: string;

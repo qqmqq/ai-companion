@@ -39,8 +39,15 @@ export async function requestText(
   } catch (error) {
     if (isAbort(error)) {
       const abortedByCaller = options.signal?.aborted === true;
+      /**
+       * 打本机服务（例如自建反代）超时时，多半不是网络慢，而是那个服务自己在内部重试：
+       * 这里最有用的就是把「去哪儿看原因」告诉用户。
+       */
+      const localHint = /^https?:\/\/(127\.0\.0\.1|localhost|\[::1\])([:/]|$)/.test(url)
+        ? "。这是本机服务：它很可能在内部一直重试（比如反代账号池里没有可用账号）——「模型设置 → 接入助手」里的「看看反代怎么了」会告诉你原因。"
+        : "";
       throw new ProviderError(
-        abortedByCaller ? "请求已被取消" : `请求超时（${options.timeoutMs}ms）`,
+        abortedByCaller ? "请求已被取消" : `请求超时（${options.timeoutMs}ms）` + localHint,
         {
           providerId: options.providerId,
           kind: abortedByCaller ? "aborted" : "timeout",

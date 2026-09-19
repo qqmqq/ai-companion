@@ -78,3 +78,38 @@
 | GAP_RULES | VERIFIED —— 间隔分类 + 明确动作（重新开口 / 接着聊） |
 | GAP_REMINDER | VERIFIED —— 间隔 ≥ 2 小时时，在当前消息前再钉一句（新分区 `time_gap`） |
 | CUSTOM_PROMPT | VERIFIED —— 用户可编辑、对所有角色生效、注入系统约束末尾、可在界面清空 |
+## 6. 反代超时怎么查（2026-09-20 补）
+
+现象：聊天/回复卡住，最后是「请求超时（60000ms）」。
+
+**超时只是表象**。反代（ds-free-api）在账号不可用时会**在内部不停重试**，
+我们这边只能等到自己的 60 秒上限 —— 真正的原因写在它自己的日志里。
+
+于是加了一个「反代怎么了」：
+
+- 接口 `GET /api/integrations/ds-free/diagnose`；
+- 读 `data/ds-free-api/run/logs/runtime.log` 的尾部，把最近几条 WARN/ERROR 按规则翻成一句人话：
+
+| 日志里出现 | 页面上的说法 |
+| --- | --- |
+| `user is muted` / `账号异常` | 这个 DeepSeek 账号被风控禁言了：等解禁，或换一个账号 |
+| `账号池无可用账号` | 反代现在没有可用账号：只能空转重试，所以我们看到的是超时 |
+| `PASSWORD_OR_USER_NAME_IS_WRONG` | 账号或密码不对 |
+| `service overloaded` / `429` | DeepSeek 网页端在过载，等一会儿再试 |
+| `Invalid` / `re-login failed` | 某个账号被标成无效，检查密码或换账号 |
+
+- 隐私：**长数字串一律打码**（手机号 → `133****2977`），只回最近 8 条，不做全量回传；
+- 界面上在「模型设置 → 接入助手」里多了一个「**看看反代怎么了**」按钮；
+- 另外，打本机服务的**超时消息**会多一句提示：这不一定是网络慢，可能是它在内部重试，并告诉你去哪儿看原因。
+
+### 真机实例（2026-09-20）
+
+```
+ok=false
+这个 DeepSeek 账号被风控禁言了（user is muted）：等它解禁，或者换一个账号。
+  反代拿不到可用账号时只能空转重试，所以我们这边看到的是超时。
+（日志里可见 mute_until = 2026-09-22T19:17:53Z，即本机时间 9 月 23 日凌晨）
+```
+
+修复提交见仓库历史；用例：`backend/test/unit/proxy-log.test.ts`、`provider-timeout-hint.test.ts`、
+`frontend/test/ds-free-login-page.test.mjs`。

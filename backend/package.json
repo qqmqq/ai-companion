@@ -10,7 +10,7 @@
     "start": "node --env-file-if-exists=../.env src/app/main.ts",
     "dev": "node scripts/dev.mjs",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "test": "node --env-file-if-exists=../.env --test --test-concurrency=4 \"test/**/*.test.ts\"",
+    "test": "node --env-file-if-exists=../.env --test --test-concurrency=4 --test-timeout=60000 \"test/**/*.test.ts\"",
     "guard": "node --test \"test/arch/*.test.ts\"",
     "build": "tsc -p tsconfig.json --noEmit",
     "smoke": "node scripts/phase2-smoke.ts",

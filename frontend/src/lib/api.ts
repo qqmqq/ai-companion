@@ -12,6 +12,7 @@ import type {
   WeixinStatusDto,
   QqStatusDto,
   DsFreeHelperStatusDto,
+  DsFreeDiagnosisDto,
   DsFreeApplyResultDto,
   ContextPreviewDto,
   ConversationDto,
@@ -288,6 +289,8 @@ export const api = {
   dsFreeStart: (input: { proxyBaseUrl?: string; binaryPath?: string } = {}) =>
     request<DsFreeHelperStatusDto>("/api/integrations/ds-free/start", { method: "POST", body: JSON.stringify(input) }),
   dsFreeStop: () => request<DsFreeHelperStatusDto>("/api/integrations/ds-free/stop", { method: "POST" }),
+  /** 反代怎么了：读它自己的日志给一句人话（超时往往只是表象） */
+  dsFreeDiagnose: () => request<DsFreeDiagnosisDto>("/api/integrations/ds-free/diagnose"),
   dsFreeApply: (input: { email: string; deepseekPassword: string; adminPassword?: string; proxyBaseUrl?: string }) =>
     request<DsFreeApplyResultDto>("/api/integrations/ds-free/apply", { method: "POST", body: JSON.stringify(input) }),
 
