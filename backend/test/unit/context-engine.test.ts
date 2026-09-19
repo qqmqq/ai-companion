@@ -207,3 +207,89 @@ test("第一次说话时不说「上次聊过」，直接说这是你们第一�
     stack.close();
   }
 });
+test("隔了很久（几小时）时：提示词要求「重新开口」，并在当前消息前再钉一句间隔提醒", async () => {
+  const stack = createChatStack({ startIso: "2026-03-01T09:00:00.000Z" });
+  try {
+    stack.settings.put("context.timeZone", "Asia/Shanghai", stack.clock.nowIso());
+    const first = stack.conversationService.appendUserMessage(stack.conversationId, [{ kind: "text", text: "我们刚才在聊飞船的事" }]);
+    await stack.conversationService.reply(stack.conversationId, stack.userId, first);
+
+    // 六小时后再开口
+    stack.clock.advance(6 * 60 * 60 * 1000);
+    const incoming = stack.conversationService.appendUserMessage(stack.conversationId, [{ kind: "text", text: "在吗" }]);
+    const built = await stack.context.build({
+      conversation: stack.conversationService.get(stack.conversationId),
+      userId: stack.userId,
+      incomingMessage: incoming,
+      taskType: "chat",
+    });
+
+    const time = built.bundle.sections.find((section) => section.kind === "time_context");
+    assert.ok(time !== undefined);
+    assert.match(time.text, /隔了几个小时/, time.text);
+    assert.match(time.text, /隔了很久之后重新开口/);
+    assert.match(time.text, /不要.{0,4}接着几个小时前的话题往下讲/, "要说清「别接着旧话题」");
+
+    // 紧贴当前消息的位置必须有一条间隔提醒
+    const gap = built.bundle.sections.find((section) => section.kind === "time_gap");
+    assert.ok(gap !== undefined, "隔了这么久，必须在新消息前提醒一次");
+    assert.match(gap.text, /上一句对话是 /);
+    assert.match(gap.text, /隔了几个小时/);
+    const kinds = built.bundle.sections.map((section) => section.kind);
+    assert.ok(kinds.indexOf("time_gap") > kinds.indexOf("recent_conversation"), "提醒要排在历史之后");
+    assert.equal(kinds.at(-1), "current_message", "提醒紧贴当前消息");
+  } finally {
+    stack.close();
+  }
+});
+
+test("刚聊完（几分钟）时：不说「好久不见」，也不插间隔提醒", async () => {
+  const stack = createChatStack({ startIso: "2026-03-01T09:00:00.000Z" });
+  try {
+    stack.settings.put("context.timeZone", "Asia/Shanghai", stack.clock.nowIso());
+    const first = stack.conversationService.appendUserMessage(stack.conversationId, [{ kind: "text", text: "在吗" }]);
+    await stack.conversationService.reply(stack.conversationId, stack.userId, first);
+    stack.clock.advance(2 * 60 * 1000);
+    const incoming = stack.conversationService.appendUserMessage(stack.conversationId, [{ kind: "text", text: "继续说" }]);
+    const built = await stack.context.build({
+      conversation: stack.conversationService.get(stack.conversationId),
+      userId: stack.userId,
+      incomingMessage: incoming,
+      taskType: "chat",
+    });
+    const time = built.bundle.sections.find((section) => section.kind === "time_context");
+    assert.match(time?.text ?? "", /接着刚才聊/);
+    assert.equal(built.bundle.sections.some((section) => section.kind === "time_gap"), false);
+  } finally {
+    stack.close();
+  }
+});
+
+test("对话提示词补充：填了就以「用户自定义要求」进系统约束，留空就不出现", async () => {
+  const stack = createChatStack({ startIso: "2026-03-01T09:00:00.000Z" });
+  try {
+    const incoming = stack.conversationService.appendUserMessage(stack.conversationId, [{ kind: "text", text: "你好" }]);
+    const before = await stack.context.build({
+      conversation: stack.conversationService.get(stack.conversationId),
+      userId: stack.userId,
+      incomingMessage: incoming,
+      taskType: "chat",
+    });
+    const beforeText = before.bundle.sections.find((section) => section.kind === "app_instructions")?.text ?? "";
+    assert.equal(beforeText.includes("用户自定义要求"), false, "没填就不该出现这一段");
+
+    stack.settings.put("prompt.custom", "说话短一点，别用感叹号。", stack.clock.nowIso());
+    const after = await stack.context.build({
+      conversation: stack.conversationService.get(stack.conversationId),
+      userId: stack.userId,
+      incomingMessage: incoming,
+      taskType: "chat",
+    });
+    const afterText = after.bundle.sections.find((section) => section.kind === "app_instructions")?.text ?? "";
+    assert.match(afterText, /用户自定义要求/);
+    assert.match(afterText, /说话短一点，别用感叹号。/);
+    assert.match(afterText, /不得违反上面的约束/, "自定义要求不能盖过基础约束");
+  } finally {
+    stack.close();
+  }
+});

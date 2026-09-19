@@ -268,6 +268,11 @@ export const api = {
     request<{ cancelled: boolean }>(`/api/channels/weixin/login/${sessionId}/cancel`, { method: "POST" }),
   weixinRemoveAccount: (accountId: string) => request<void>(`/api/channels/weixin/accounts/${accountId}`, { method: "DELETE" }),
 
+  /** 对话提示词补充（对所有角色生效，追加进系统约束那一段） */
+  promptSettings: () => request<{ custom: string; appliesTo: string }>("/api/context/prompt"),
+  savePromptSettings: (custom: string) =>
+    request<{ custom: string }>("/api/context/prompt", { method: "PUT", body: JSON.stringify({ custom }) }),
+
   /** QQ 机器人：状态、保存配置、重连、断开、清密钥（密钥只进不出） */
   qqStatus: () => request<QqStatusDto>("/api/channels/qq/status"),
   qqSaveConfig: (input: { appId: string; clientSecret?: string; sandbox?: boolean }) =>

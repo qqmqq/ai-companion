@@ -18,7 +18,8 @@ export type ContextSectionKind =
   | "memories"
   | "events"
   | "conversation_summary"
-  | "background";
+  | "background"
+  | "time_gap"; // 紧贴当前消息的一句间隔提醒（"上一句是 6 小时前说的"）
 
 export interface ContextSection {
   kind: ContextSectionKind;

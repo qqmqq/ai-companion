@@ -92,6 +92,30 @@ export function describeRelative(iso: string, nowIso: string): string {
   return String(Math.floor(days / 365)) + " 年前";
 }
 
+/**
+ * 这次间隔有多久 —— 决定角色该「接着刚才说」还是「重新开口」。
+ * 真实反馈：隔了几个小时，角色还在接着上一轮的话题往下讲，非常割裂。
+ */
+export interface GapKind {
+  /** 人话：刚刚 / 过了一会儿 / 隔了几个小时 / 隔了大半天 / 隔了一天以上 */
+  label: string;
+  /** 是否到了「该重新开口」的程度（超过两小时） */
+  longEnoughToRestart: boolean;
+}
+
+export function describeGapKind(iso: string, nowIso: string): GapKind {
+  const then = Date.parse(iso);
+  const now = Date.parse(nowIso);
+  if (!Number.isFinite(then) || !Number.isFinite(now)) return { label: "说不清", longEnoughToRestart: false };
+  const minutes = (now - then) / 60_000;
+  if (minutes < 5) return { label: "接着刚才的话题", longEnoughToRestart: false };
+  if (minutes < 60) return { label: "过了一会儿", longEnoughToRestart: false };
+  if (minutes < 120) return { label: "隔了一两个小时", longEnoughToRestart: true };
+  if (minutes < 12 * 60) return { label: "隔了几个小时", longEnoughToRestart: true };
+  if (minutes < 30 * 60) return { label: "隔了大半天", longEnoughToRestart: true };
+  return { label: "隔了一天以上", longEnoughToRestart: true };
+}
+
 /** 一句话说清"现在"：2026年9月19日 周六 14:32（下午） */
 export function describeNowForPrompt(iso: string, timeZone?: string): string {
   const p = parts(iso, timeZone);

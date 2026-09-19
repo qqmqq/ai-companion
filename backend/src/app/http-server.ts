@@ -15,6 +15,7 @@ import { registerTimelineRoutes } from "../api/routes/timeline.ts";
 import { registerSchedulerRoutes } from "../api/routes/scheduler.ts";
 import { registerProactiveRoutes } from "../api/routes/proactive.ts";
 import { registerIntegrationRoutes } from "../api/routes/integrations.ts";
+import { registerPromptRoutes } from "../api/routes/prompt.ts";
 import type { HttpRouteHost, RouteHandler } from "../core/ports/channel-module.ts";
 
 /** 把渠道自己的路由挂到 web 层：渠道不需要 import 具体 web 框架。 */
@@ -91,6 +92,7 @@ export function createHttpServer(container: Container): FastifyInstance {
   registerTimelineRoutes(app, container);
   registerSchedulerRoutes(app, container);
   registerIntegrationRoutes(app, container);
+  registerPromptRoutes(app, container);
   registerProactiveRoutes(app, container);
   registerEventRoutes(app, container);
 

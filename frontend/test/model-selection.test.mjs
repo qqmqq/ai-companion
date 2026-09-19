@@ -46,6 +46,7 @@ function installApi(options = {}) {
     },
     discoveryFails: options.discoveryFails ?? [],
     configured: options.configured ?? null,
+    prompt: options.prompt ?? "",
   };
   globalThis.fetch = async (input, init = {}) => {
     const url = String(input);
@@ -60,6 +61,15 @@ function installApi(options = {}) {
       return new Response(null, { status: 204 });
     }
     if (path.endsWith("/api/usage")) return json({ since: "x", summary: [], recent: [] });
+    // 对话提示词补充：设置页挂载时会读一次
+    if (path.endsWith("/api/context/prompt")) {
+      if (method === "PUT") {
+        const body = JSON.parse(String(init.body ?? "{}"));
+        state.prompt = String(body.custom ?? "").trim();
+        return json({ custom: state.prompt });
+      }
+      return json({ custom: state.prompt, appliesTo: "系统约束（对所有角色生效）" });
+    }
     // 设置页里嵌了「接入助手」，它挂载时会问一次状态
     if (path.endsWith("/api/integrations/ds-free/status")) return json({ phase: "idle", preparing: false, deviceId: null, pageState: null, pageHint: "", browser: null, debugPort: null, browserClosed: null, signInUrl: "", proxyBaseUrl: "", proxyReachable: false, proxyStarted: null, proxyNote: "", proxyProjectUrl: "", binaryPath: null, providerId: null, providerNote: "", lastError: null });
     if (path.endsWith("/api/model-routing") && method === "GET") {
@@ -156,6 +166,15 @@ async function click(node) {
   await settle();
 }
 
+async function typeIntoTextarea(node, value) {
+  await act(async () => {
+    const setter = Object.getOwnPropertyDescriptor(dom.window.HTMLTextAreaElement.prototype, "value").set;
+    setter.call(node, value);
+    node.dispatchEvent(new dom.window.Event("input", { bubbles: true }));
+  });
+  await settle(2);
+}
+
 async function typeInto(input, value) {
   const setter = Object.getOwnPropertyDescriptor(dom.window.HTMLInputElement.prototype, "value").set;
   await act(async () => {
@@ -228,6 +247,27 @@ test("Test 7：切换 Provider 时，旧 Provider 的模型不会被错误保留
   const value = modelSelect(row)?.value ?? "";
   assert.notEqual(value, "model-B", "换成 p2 之后绝不能还留着 p1 的 model-B");
   assert.ok(value === "p2-model-1" || value === "p2-default", "应当切到 p2 的候选/默认模型，实际 " + value);
+  await act(async () => { root.unmount(); });
+});
+
+test("Test 11：对话提示词补充能读能写，保存后有确认，清空也行", async () => {
+  const api = installApi({ prompt: "说话短一点。" });
+  const root = await mount();
+  const page = dom.window.document.getElementById("root");
+  assert.match(page.textContent ?? "", /对话提示词（可选）/);
+
+  const textarea = page.querySelector("textarea");
+  assert.ok(textarea !== null, "应该有提示词输入框");
+  assert.equal(textarea.value, "说话短一点。", "挂载时要把已保存的内容读出来");
+
+  await typeIntoTextarea(textarea, "别用感叹号。");
+  await click([...page.querySelectorAll("button")].find((node) => (node.textContent ?? "").includes("保存提示词")));
+  assert.equal(api.prompt, "别用感叹号。", "保存要把内容发给后端");
+  assert.match(dom.window.document.getElementById("root").textContent ?? "", /已保存，下一句起生效/);
+
+  await click([...dom.window.document.getElementById("root").querySelectorAll("button")].find((node) => (node.textContent ?? "").includes("清空")));
+  assert.equal(api.prompt, "", "清空等于保存空串");
+  assert.match(dom.window.document.getElementById("root").textContent ?? "", /已清空/);
   await act(async () => { root.unmount(); });
 });
 

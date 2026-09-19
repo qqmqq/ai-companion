@@ -36,6 +36,7 @@ const ORDERED_KINDS: ContextSectionKind[] = [
   "conversation_summary",
   "background",
   "recent_conversation",
+  "time_gap",
   "proactive_intent",
   "current_message",
 ];
@@ -132,6 +133,8 @@ test("上下文分区顺序与优先级是确定的，且只覆盖仍然存在�
       createdAt: at,
     });
 
+    // 现在距上一轮已经过去 5 小时：这次对话会带上「间隔提醒」那一段
+    stack.clock.advance(5 * 60 * 60 * 1000);
     const incoming = insertUserMessage(stack, conversation.id, "msg-current", "我今天想喝一杯深烘咖啡");
     const built = await stack.context.build({
       conversation,
@@ -144,7 +147,7 @@ test("上下文分区顺序与优先级是确定的，且只覆盖仍然存在�
 
     const kinds = built.bundle.sections.map((section) => section.kind);
 
-    // 顺序表 / 优先级表声明的分区集合就是这 13 个（background 目前没有生产者）
+    // 顺序表 / 优先级表声明的分区集合必须完全一致（background 目前没有生产者）
     assert.deepEqual([...ORDERED_KINDS].sort(), Object.keys(SECTION_PRESENTATION_ORDER).sort());
     assert.deepEqual([...ORDERED_KINDS].sort(), Object.keys(SECTION_PRIORITY).sort());
 
@@ -169,6 +172,7 @@ test("上下文分区顺序与优先级是确定的，且只覆盖仍然存在�
       character_definition: 2,
       character_system_prompt: 3,
       recent_conversation: 3,
+      time_gap: 3,
       runtime_state: 5,
       emotion_state: 5,
       relationship_state: 5,
