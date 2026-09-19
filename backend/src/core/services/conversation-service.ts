@@ -219,9 +219,27 @@ export function createConversationService(deps: ConversationServiceDeps) {
       return deps.messages.listByConversation(conversationId, options);
     },
 
-    /** 用户消息必须先落库，再进入上下文构建与模型调用。 */
+    /**
+     * 用户消息必须先落库，再进入上下文构建与模型调用。
+     *
+     * **幂等**：渠道在回复失败后会重投同一批消息（微信就是如此），
+     * 没有这道闸门时同一条消息会被反复插入 —— 真实事故：一条消息在会话里出现了 5 次。
+     * 有 providerMessageId 且已经落过库，就把那条还回去，不重复插入、不重复发事件。
+     */
     appendUserMessage(conversationId: ConversationId, parts: MessagePart[], providerMessageId: string | null = null): Message {
       requireConversation(conversationId);
+      if (providerMessageId !== null && providerMessageId.length > 0) {
+        const existing = deps.messages.findByProviderMessageId(conversationId, providerMessageId);
+        if (existing !== null) {
+          deps.logger.info("duplicate inbound message ignored (same provider message id)", {
+            step: "inbound.persist_user",
+            status: "duplicate",
+            conversationId,
+            messageId: existing.id,
+          });
+          return existing;
+        }
+      }
       return insertMessage({ conversationId, role: "user", parts, providerMessageId, status: "completed" });
     },
 

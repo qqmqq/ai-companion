@@ -172,7 +172,12 @@ export function normalizeMessageParts(raw: unknown): PartNormalizationResult {
     const kind = record.kind;
 
     if (kind === "text") {
-      const text = typeof record.text === "string" ? record.text.replace(/[\u0000-\u001f\u007f]/g, "") : "";
+      /**
+       * 只清掉真正的控制垃圾（NUL/ESC 之类），**换行与制表符必须留下**：
+       * 以前这里连 \n 一起删了，于是"从库里读回来的消息"会丢掉所有换行 ——
+       * 重投一条回复（渠道重试）或拿 parts 去合成语音时，整段就变成一行。
+       */
+      const text = typeof record.text === "string" ? record.text.replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/g, "") : "";
       if (text.length === 0) {
         rejected.push({ index, reason: "invalid_shape" });
         return;

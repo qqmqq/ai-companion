@@ -101,6 +101,16 @@ test("a mixed message keeps order and survives a database round-trip", () => {
   }
 });
 
+test("文本片段只清控制垃圾，换行与制表符必须留下（否则从库里读回来的消息会变成一行）", () => {
+  const result = normalizeMessageParts([
+    { kind: "text", text: "第一行\n第二行\n\t缩进" },
+    { kind: "text", text: "坏\u0000字\u001b符" },
+  ]);
+  assert.equal(result.parts[0]?.kind === "text" ? result.parts[0].text : "", "第一行\n第二行\n\t缩进");
+  assert.equal(result.parts[1]?.kind === "text" ? result.parts[1].text : "", "坏字符", "NUL/ESC 仍要被清掉");
+  assert.equal(partsToText(result.parts), "第一行\n第二行\n\t缩进\n坏字符");
+});
+
 test("empty and structurally invalid inputs degrade safely instead of throwing", () => {
   assert.deepEqual(normalizeMessageParts([]), { parts: [], rejected: [] });
   assert.deepEqual(normalizeMessageParts([]).parts, []);

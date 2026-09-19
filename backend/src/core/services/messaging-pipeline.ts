@@ -563,7 +563,8 @@ export function createMessagingPipeline(deps: MessagingPipelineDeps) {
       parts: toOutboundParts(input.characterMessage.parts),
       replyToProviderMessageId: input.message.externalRef.providerMessageId,
       streaming: { mode: "none", runId: null },
-      idempotencyKey: randomToken(12),
+      // 由回复本身派生（而不是随机）：渠道重投同一条回复时 key 不变，微信侧可据此去重
+      idempotencyKey: "reply:" + input.characterMessage.id,
     };
   }
 
@@ -655,6 +656,30 @@ export function createMessagingPipeline(deps: MessagingPipelineDeps) {
         conversationId: conversation.id,
         messageId: userMessage.id,
       });
+      /**
+       * 渠道重投的保护：这条用户消息已经有**完成态**的回复时，不要再调一次模型，
+       * 直接把那条回复再送一遍（出站幂等键由回复 id 派生，渠道侧可去重）。
+       */
+      const last = deps.messages.lastMessage(conversation.id);
+      const answered =
+        last !== null &&
+        last.role === "character" &&
+        last.status === "completed" &&
+        last.createdAt >= userMessage.createdAt &&
+        last.textRender.trim().length > 0
+          ? last
+          : null;
+      if (answered !== null) {
+        deps.logger.info("inbound already answered; re-delivering instead of generating again", {
+          step: "inbound.generate",
+          status: "skipped",
+          conversationId: conversation.id,
+          messageId: answered.id,
+        });
+        const redelivered = buildResponse({ message, conversation, characterMessage: answered });
+        await deliver(message, redelivered);
+        return redelivered;
+      }
       const replyMessage = await deps.conversations.reply(conversation.id, userId, userMessage, { actionNote: action.actionNote });
       const characterMessage = correctFalseSuccess(replyMessage, action, userTextOf(message));
       deps.logger.info("inbound reply generated", {

@@ -52,10 +52,17 @@ export interface MessageRepository {
   insert(message: Message): void;
   getById(id: MessageId): Message | null;
   listByConversation(conversationId: ConversationId, options?: { limit?: number; before?: string }): Message[];
+  /**
+   * 按「渠道给的消息 id」找已经落库的那条（同一条外部消息只该存在一条）。
+   * 渠道在失败后会重投同一批消息，靠它做幂等。
+   */
+  findByProviderMessageId(conversationId: ConversationId, providerMessageId: string): Message | null;
   countByConversation(conversationId: ConversationId): number;
   countByRole(conversationId: ConversationId, role: Message["role"]): number;
   countBySourceSince(conversationId: ConversationId, source: Message["source"], sinceIso: string): number;
   lastMessageAt(conversationId: ConversationId, role?: Message["role"]): string | null;
+  /** 最后一条消息本身（渠道重投时判断"这句是不是已经回过了"） */
+  lastMessage(conversationId: ConversationId): Message | null;
   /** 会话列表用：最后一条消息的纯文本（没有消息时 null） */
   lastMessageText(conversationId: ConversationId): string | null;
   updateEdited(id: MessageId, parts: MessagePart[], textRender: string, at: string): void;

@@ -49,6 +49,10 @@ export function createMessageRepository(db: Database): MessageRepository {
   const listBeforeStmt = db.raw.prepare(
     `SELECT ${SELECT_COLUMNS} FROM messages WHERE conversation_id = ? AND created_at < ? ORDER BY created_at ASC, rowid ASC LIMIT ?`,
   );
+  // 渠道重投时的幂等查询：provider_message_id 上本来就有 idx_messages_provider 索引
+  const findByProviderStmt = db.raw.prepare(
+    `SELECT ${SELECT_COLUMNS} FROM messages WHERE conversation_id = ? AND provider_message_id = ? ORDER BY created_at ASC, rowid ASC LIMIT 1`,
+  );
   const countStmt = db.raw.prepare("SELECT COUNT(*) AS n FROM messages WHERE conversation_id = ?");
   const updateStmt = db.raw.prepare(
     "UPDATE messages SET content_json = ?, text_render = ?, edited_at = ? WHERE id = ?",
@@ -65,6 +69,9 @@ export function createMessageRepository(db: Database): MessageRepository {
   );
   const lastMessageAtStmt = db.raw.prepare(
     "SELECT created_at FROM messages WHERE conversation_id = ? AND (? IS NULL OR role = ?) ORDER BY created_at DESC, rowid DESC LIMIT 1",
+  );
+  const lastMessageStmt = db.raw.prepare(
+    `SELECT ${SELECT_COLUMNS} FROM messages WHERE conversation_id = ? ORDER BY created_at DESC, rowid DESC LIMIT 1`,
   );
   const lastMessageTextStmt = db.raw.prepare(
     "SELECT text_render FROM messages WHERE conversation_id = ? ORDER BY created_at DESC, rowid DESC LIMIT 1",
@@ -126,12 +133,20 @@ export function createMessageRepository(db: Database): MessageRepository {
       ) as Array<Record<string, unknown>>;
       return rows.map(map);
     },
+    findByProviderMessageId: (conversationId, providerMessageId) => {
+      const row = findByProviderStmt.get(conversationId, providerMessageId) as Record<string, unknown> | undefined;
+      return row === undefined ? null : map(row);
+    },
     countByRole: (conversationId, role) => Number((countByRoleStmt.get(conversationId, role) as { n: number }).n),
     countBySourceSince: (conversationId, source, sinceIso) =>
       Number((countBySourceStmt.get(conversationId, source, sinceIso) as { n: number }).n),
     lastMessageAt: (conversationId, role) => {
       const row = lastMessageAtStmt.get(conversationId, role ?? null, role ?? null) as { created_at: string } | undefined;
       return row === undefined ? null : row.created_at;
+    },
+    lastMessage: (conversationId) => {
+      const row = lastMessageStmt.get(conversationId) as Record<string, unknown> | undefined;
+      return row === undefined ? null : map(row);
     },
     lastMessageText: (conversationId) => {
       const row = lastMessageTextStmt.get(conversationId) as { text_render: string } | undefined;
