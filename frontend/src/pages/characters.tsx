@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { api, type CharacterDefinitionInput } from "../lib/api.ts";
 import type { CharacterDto } from "../lib/types.ts";
 
@@ -137,6 +137,143 @@ function AvatarPicker(props: {
         </button>
       )}
     </div>
+  );
+}
+
+/**
+ * 对话提示词（这个角色专属）。
+ *
+ * 跟角色走，但**不进角色版本**：角色定义是带版本的，已有会话冻结在创建时那一版，
+ * 写进定义里就会出现「改完下一句没反应」——所以它存在设置表里，改完下一句就生效。
+ * 留空 = 不留覆盖，用「默认对话提示词」。
+ */
+function CharacterPromptEditor(props: { character: CharacterDto; onError: (message: string) => void }) {
+  const [text, setText] = useState<string | null>(null);
+  /** 全局默认那份：用来告诉用户"留空会发生什么" */
+  const [fallback, setFallback] = useState("");
+  const [note, setNote] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    let alive = true;
+    setText(null);
+    setNote(null);
+    void api
+      .characterPrompt(props.character.id)
+      .then((state) => {
+        if (!alive) return;
+        setText(state.prompt);
+        setFallback(state.fallback);
+      })
+      .catch((error: Error) => {
+        if (alive) props.onError(error.message);
+      });
+    return () => {
+      alive = false;
+    };
+  }, [props.character.id]);
+
+  async function save(next: string) {
+    setBusy(true);
+    try {
+      const saved = await api.saveCharacterPrompt(props.character.id, next);
+      setText(saved.prompt);
+      setNote(saved.prompt.length === 0 ? "已清空，改回用默认。" : "已保存，后一句起生效。");
+    } catch (error) {
+      props.onError((error as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  const value = text ?? "";
+  return (
+    <div className="prompt-editor">
+      <label className="field">
+        <span className="hint">对话提示词（只对「{props.character.name}」生效，改完下一句就生效）</span>
+        <textarea
+          value={value}
+          rows={4}
+          maxLength={4000}
+          disabled={text === null}
+          placeholder={fallback.length > 0 ? "留空 = 用默认：" + fallback : "例如：说话短一点，别用感叹号；称呼我「你」就好。"}
+          onChange={(event) => {
+            setText(event.target.value);
+            setNote(null);
+          }}
+        />
+      </label>
+      <div className="row">
+        <button disabled={busy || text === null} onClick={() => void save(value)}>
+          {busy ? "保存中…" : "保存对话提示词"}
+        </button>
+        <button className="ghost" disabled={busy || value.length === 0} onClick={() => void save("")}>
+          清空，改回用默认
+        </button>
+        {note !== null && <span className="hint">{note}</span>}
+        {value.length === 0 && fallback.length > 0 && <span className="hint">当前用的是默认：{fallback}</span>}
+      </div>
+    </div>
+  );
+}
+
+/** 所有角色通用的默认对话提示词（原来在「模型设置」里，现在搬到角色页） */
+function DefaultPromptEditor(props: { onError: (message: string) => void }) {
+  const [text, setText] = useState<string | null>(null);
+  const [note, setNote] = useState<string | null>(null);
+
+  useEffect(() => {
+    let alive = true;
+    void api
+      .promptSettings()
+      .then((state) => {
+        if (alive) setText(state.custom);
+      })
+      .catch((error: Error) => {
+        if (alive) props.onError(error.message);
+      });
+    return () => {
+      alive = false;
+    };
+  }, []);
+
+  async function save(next: string) {
+    try {
+      const saved = await api.savePromptSettings(next);
+      setText(saved.custom);
+      setNote(saved.custom.length === 0 ? "已清空。" : "已保存，下一句起生效。");
+    } catch (error) {
+      props.onError((error as Error).message);
+    }
+  }
+
+  return (
+    <details className="prompt-default">
+      <summary>默认对话提示词（所有角色通用）</summary>
+      <p className="hint">
+        这里写的要求会追加进每次对话的「系统约束」那一段。<strong>角色自己写了就不再用它</strong>；角色没写自己那份时，用这里的内容。
+      </p>
+      <textarea
+        value={text ?? ""}
+        rows={3}
+        maxLength={4000}
+        disabled={text === null}
+        placeholder="例如：说话短一点，别用感叹号；称呼我「你」就好，不要叫先生女士。"
+        onChange={(event) => {
+          setText(event.target.value);
+          setNote(null);
+        }}
+      />
+      <div className="row">
+        <button disabled={text === null} onClick={() => void save(text ?? "")}>
+          保存默认
+        </button>
+        <button className="ghost" disabled={text === null || (text ?? "").length === 0} onClick={() => void save("")}>
+          清空
+        </button>
+        {note !== null && <span className="hint">{note}</span>}
+      </div>
+    </details>
   );
 }
 
@@ -387,7 +524,10 @@ export function CharactersPage(props: {
   return (
     <section className="panel">
       <h2>角色</h2>
-      <p className="hint">角色属于本程序自己的模型：名称 / 描述 / 性格 / 背景 / System Prompt / 开场白 / 头像。编辑会生成新版本，已有会话继续用旧版本。</p>
+      <p className="hint">
+        角色属于本程序自己的模型：名称 / 描述 / 性格 / 背景 / System Prompt / 开场白 / 头像。编辑会生成新版本，已有会话继续用旧版本。
+        对话提示词在下面每个角色的「编辑」里改——<strong>改完下一句就生效</strong>，不会因为版本冻结而失效。
+      </p>
       <div className="row">
         <button onClick={() => { setCreating(!creating); setStudio(false); }}>{creating ? "收起" : "新建角色"}</button>
         <button className="ghost" onClick={() => { setStudio(!studio); setCreating(false); }}>
@@ -472,12 +612,16 @@ export function CharactersPage(props: {
                   }
                 />
                 <AvatarPicker character={character} busy={busy} onUploaded={props.onChanged} onError={props.onError} />
+                <CharacterPromptEditor key={character.id} character={character} onError={props.onError} />
               </div>
             )}
           </li>
         ))}
         {props.characters.length === 0 && <li className="empty">还没有角色，点上面的「新建角色」开始。</li>}
       </ul>
+
+      {/* 全局那份放最后：这里主要是按角色改，通用的默认是兜底 */}
+      <DefaultPromptEditor onError={props.onError} />
     </section>
   );
 }

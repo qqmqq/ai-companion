@@ -5,6 +5,7 @@ import { toCharacterDto } from "../dto/mappers.ts";
 import { normalizeDefinition } from "../../core/model/character.ts";
 import { parseOrThrow } from "../validation.ts";
 import { DomainError } from "../../core/model/errors.ts";
+import { MAX_PROMPT_CHARS, characterPromptKey, readCharacterPrompt, readGlobalPrompt } from "../../core/context/custom-prompt.ts";
 
 /** 角色定义：只保留本程序自己会用到的字段（没有任何角色卡格式兼容概念） */
 const DefinitionSchema = z.object({
@@ -35,6 +36,9 @@ const AvatarSchema = z.object({
   base64: z.string().min(1),
   filename: z.string().min(1).default("avatar.png"),
 });
+
+/** 对话提示词：每个角色一份；空串 = 不留覆盖（退回全局默认） */
+const PromptSchema = z.object({ prompt: z.string().max(MAX_PROMPT_CHARS) });
 
 /** 头像上限 8 MiB：base64 之后仍在 HTTP 层 12 MiB 请求体上限之内 */
 const AVATAR_MAX_BYTES = 8 * 1024 * 1024;
@@ -180,6 +184,31 @@ export function registerCharacterRoutes(app: FastifyInstance, container: Contain
     container.services.characters.setAvatar(id, null);
     if (previousId !== null) await container.mediaStorage.remove(previousId);
     return toCharacterDto(container.services.characters.get(id));
+  });
+
+  /**
+   * 对话提示词：每个角色一份，改完下一句就生效。
+   * 存在设置表里、不进角色版本 —— 会话冻结在创建时那一版，写进定义里会出现「改了没反应」。
+   * 角色没写自己那份时用全局默认，所以 GET 把全局那份也一并给出，界面才说得清留空会发生什么。
+   */
+  app.get("/api/characters/:id/prompt", async (request) => {
+    const { id } = request.params as { id: string };
+    container.services.characters.get(id);
+    return {
+      prompt: readCharacterPrompt(container.repos.settings, id),
+      fallback: readGlobalPrompt(container.repos.settings),
+    };
+  });
+
+  app.put("/api/characters/:id/prompt", async (request) => {
+    const { id } = request.params as { id: string };
+    const body = parseOrThrow(PromptSchema, request.body);
+    container.services.characters.get(id);
+    const value = body.prompt.trim();
+    // 空串 = 取消覆盖：直接删键，不在设置表里留一条空记录
+    if (value.length === 0) container.repos.settings.delete(characterPromptKey(id));
+    else container.repos.settings.put(characterPromptKey(id), value, container.clock.nowIso());
+    return { prompt: value };
   });
 
   app.get("/api/characters/:id/versions", async (request) => {

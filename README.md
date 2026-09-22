@@ -51,6 +51,9 @@
 - ⏰ **主动找你，而且像它自己说的话**
   定时提醒与主动消息复用同一条上下文链路（人设 + 记忆 + 关系 + 情绪一起进提示词），到点说出来的是角色口吻的话，而不是把记录原文念一遍。自主等级、静音时段、每日上限、冷却都能配。
 
+- ✍️ **对话提示词按角色分开写**
+  想让它对某个角色说话短一点、少用感叹号、换个称呼，就在「角色」页展开那个角色的编辑区直接写，**改完下一句就生效**（不用等新会话）。没写的角色自动用全局默认那一份；留空即为「回到默认」。
+
 - 🔌 **渠道可插拔，模型可换**
   网页（内置）+ 微信（可选模块，含图片/文件/视频/语音的加解密与编解码）+ QQ（可选模块，私聊与群聊 @）。LLM / ASR / TTS 都走同一套 Provider 注册表，任务档位（chat / 记忆抽取 / 情绪分析 / 角色设定…）可以分别选不同模型。
 
@@ -70,7 +73,7 @@
 | **语言** | TypeScript（Node 24 原生类型剥离，`.ts` 直接运行，**无构建步骤**） |
 | **后端** | [Fastify 5](https://fastify.dev/) · [zod](https://zod.dev/) 校验 · `node:sqlite`（WAL + 外键） · `silk-wasm`（微信语音 SILK 编解码） |
 | **前端** | React 19 · Vite 6 · 原生 CSS（无 UI 框架依赖） · 界面全中文 |
-| **工程** | pnpm workspace（`backend` / `frontend` / `scripts`） · `node:test`（后端 441 例 / 前端 55 例） |
+| **工程** | pnpm workspace（`backend` / `frontend` / `scripts`） · `node:test`（后端 469 例 / 前端 64 例） |
 | **架构** | 六边形：`core/`（model · ports · services · context · memory）+ 渠道适配层；组合根 `app/bootstrap.ts` 是唯一装配点 |
 | **模型** | OpenAI 兼容 / Ollama / 内置 echo 占位；ModelRouter 按任务档位选 Provider + Model，失败可解释 |
 | **存储** | SQLite（迁移脚本 + FTS5 中文检索） · 本地媒体存储（凭据 AES 加密，密钥单独存放） |
@@ -149,7 +152,7 @@ pnpm dev               # 同时启动后端(8787) 与前端(5173)
 
 ```bash
 pnpm typecheck     # 全量类型检查
-pnpm test          # 后端 441 例 + 前端 55 例（单元 / 集成 / 架构守卫）
+pnpm test          # 后端 469 例 + 前端 64 例（单元 / 集成 / 架构守卫）
 pnpm guard         # 只跑 8 条架构硬守卫
 pnpm build         # 后端类型检查 + 前端产物构建
 pnpm --filter @companion/backend smoke   # 冒烟：聊天 / 记忆 / 上下文

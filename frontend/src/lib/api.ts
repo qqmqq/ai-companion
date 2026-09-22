@@ -109,6 +109,12 @@ export const api = {
   clearCharacterAvatar: (id: string) => request<CharacterDto>("/api/characters/" + id + "/avatar", { method: "DELETE" }),
   /** 头像或第一版时的首条消息都用它；没有头像时后端返回 404 */
   characterAvatarUrl: (id: string) => "/api/characters/" + id + "/avatar",
+  /** 某个角色的对话提示词；fallback 是全局默认那份（界面要说清留空会发生什么） */
+  characterPrompt: (id: string) =>
+    request<{ prompt: string; fallback: string }>("/api/characters/" + id + "/prompt"),
+  /** 保存这个角色的对话提示词；空串 = 取消覆盖，回到全局默认 */
+  saveCharacterPrompt: (id: string, prompt: string) =>
+    request<{ prompt: string }>("/api/characters/" + id + "/prompt", { method: "PUT", body: JSON.stringify({ prompt }) }),
 
   conversations: () => request<{ items: ConversationDto[] }>("/api/conversations").then((r) => r.items),
   /** newSession=true：开一个绑定**当前**角色版本的新会话（旧会话继续用它们各自的旧版本） */

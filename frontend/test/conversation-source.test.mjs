@@ -64,6 +64,9 @@ function installApi() {
     const path = String(input).split("?")[0];
     const method = (init.method ?? "GET").toUpperCase();
     if (path.endsWith("/api/characters")) return json({ items: [CHARACTER] });
+    // 角色页（默认页签）挂载时会读这两处提示词
+    if (path.endsWith("/api/context/prompt")) return json({ custom: "", appliesTo: "系统约束（对所有角色生效）" });
+    if (path.endsWith("/api/characters/" + CHARACTER.id + "/prompt")) return json({ prompt: "", fallback: "" });
     if (path.endsWith("/api/conversations") && method === "GET") return json({ items: state.conversations });
     if (path.endsWith("/api/system/health")) return json({ status: "ok", channels: [] });
     if (path.endsWith("/api/messages") || /\/api\/conversations\/[^/]+\/messages$/.test(path)) return json({ items: [] });

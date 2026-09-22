@@ -250,24 +250,14 @@ test("Test 7：切换 Provider 时，旧 Provider 的模型不会被错误保留
   await act(async () => { root.unmount(); });
 });
 
-test("Test 11：对话提示词补充能读能写，保存后有确认，清空也行", async () => {
-  const api = installApi({ prompt: "说话短一点。" });
+test("Test 11：设置页不再改提示词，只指路到「角色」页（搬家不丢功能）", async () => {
+  installApi({ prompt: "说话短一点。" });
   const root = await mount();
   const page = dom.window.document.getElementById("root");
-  assert.match(page.textContent ?? "", /对话提示词（可选）/);
-
-  const textarea = page.querySelector("textarea");
-  assert.ok(textarea !== null, "应该有提示词输入框");
-  assert.equal(textarea.value, "说话短一点。", "挂载时要把已保存的内容读出来");
-
-  await typeIntoTextarea(textarea, "别用感叹号。");
-  await click([...page.querySelectorAll("button")].find((node) => (node.textContent ?? "").includes("保存提示词")));
-  assert.equal(api.prompt, "别用感叹号。", "保存要把内容发给后端");
-  assert.match(dom.window.document.getElementById("root").textContent ?? "", /已保存，下一句起生效/);
-
-  await click([...dom.window.document.getElementById("root").querySelectorAll("button")].find((node) => (node.textContent ?? "").includes("清空")));
-  assert.equal(api.prompt, "", "清空等于保存空串");
-  assert.match(dom.window.document.getElementById("root").textContent ?? "", /已清空/);
+  const text = page.textContent ?? "";
+  assert.match(text, /对话提示词/, "要留一句话，免得用户找不到它去哪了");
+  assert.match(text, /已经挪到「角色」页/);
+  assert.equal(page.querySelector("textarea"), null, "设置页里不该再有提示词输入框（编辑器已搬到角色页）");
   await act(async () => { root.unmount(); });
 });
 

@@ -2,6 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { createChatStack } from "../helpers/chat-stack.ts";
 import { estimateTokens } from "../../src/core/context/tokens.ts";
+import { GLOBAL_PROMPT_KEY, characterPromptKey } from "../../src/core/context/custom-prompt.ts";
 
 const AT = "2026-01-01T00:00:00.000Z";
 
@@ -289,6 +290,36 @@ test("对话提示词补充：填了就以「用户自定义要求」进系统�
     assert.match(afterText, /用户自定义要求/);
     assert.match(afterText, /说话短一点，别用感叹号。/);
     assert.match(afterText, /不得违反上面的约束/, "自定义要求不能盖过基础约束");
+  } finally {
+    stack.close();
+  }
+});
+
+test("对话提示词：角色自己那份压过全局默认，取消覆盖后自动退回全局", async () => {
+  const stack = createChatStack({ startIso: "2026-03-01T09:00:00.000Z" });
+  try {
+    const incoming = stack.conversationService.appendUserMessage(stack.conversationId, [{ kind: "text", text: "你好" }]);
+    const readAppText = async (): Promise<string> => {
+      const built = await stack.context.build({
+        conversation: stack.conversationService.get(stack.conversationId),
+        userId: stack.userId,
+        incomingMessage: incoming,
+        taskType: "chat",
+      });
+      return built.bundle.sections.find((section) => section.kind === "app_instructions")?.text ?? "";
+    };
+
+    stack.settings.put(GLOBAL_PROMPT_KEY, "全局：说话短一点。", stack.clock.nowIso());
+    assert.match(await readAppText(), /全局：说话短一点。/, "角色没写自己的那份时先用全局默认");
+
+    stack.settings.put(characterPromptKey(stack.characterId), "角色：叫我名字，别叫先生。", stack.clock.nowIso());
+    const own = await readAppText();
+    assert.match(own, /角色：叫我名字，别叫先生。/);
+    assert.equal(own.includes("全局：说话短一点。"), false, "角色写了就不该再把全局那份也塞进去");
+
+    // 取消覆盖（接口层是删键）：回到全局默认
+    stack.settings.delete(characterPromptKey(stack.characterId));
+    assert.match(await readAppText(), /全局：说话短一点。/);
   } finally {
     stack.close();
   }

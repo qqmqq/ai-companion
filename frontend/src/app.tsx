@@ -93,7 +93,8 @@ export function App() {
     <div className="app">
       <header>
         <h1>AI Companion</h1>
-        <nav>
+        {/* aria-current 让读屏器知道当前在哪一页 */}
+        <nav aria-label="主导航">
           {(
             [
               ["characters", "角色"],
@@ -107,7 +108,12 @@ export function App() {
               ["settings", "模型设置"],
             ] as Array<[Tab, string]>
           ).map(([key, label]) => (
-            <button key={key} className={tab === key ? "active" : ""} onClick={() => setTab(key)}>
+            <button
+              key={key}
+              className={tab === key ? "active" : ""}
+              aria-current={tab === key ? "page" : undefined}
+              onClick={() => setTab(key)}
+            >
               {label}
             </button>
           ))}
@@ -115,7 +121,8 @@ export function App() {
       </header>
 
       {error !== null && (
-        <div className="error" onClick={() => setError(null)}>
+        // 出错横幅做成警报区：出现时读屏器会念出来，点一下即可关掉
+        <div className="error" role="alert" onClick={() => setError(null)}>
           出错了：{error}
           <span className="hint">（点击关闭）</span>
         </div>

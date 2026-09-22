@@ -191,9 +191,6 @@ export function SettingsPage(props: { onError: (message: string) => void }) {
   const [modelsError, setModelsError] = useState<Record<string, string>>({});
   const [discovering, setDiscovering] = useState(false);
   const [discoverNote, setDiscoverNote] = useState<string | null>(null);
-  /** 对话提示词补充：对所有角色生效，追加进「系统约束」那一段 */
-  const [customPrompt, setCustomPrompt] = useState("");
-  const [promptSaved, setPromptSaved] = useState<string | null>(null);
 
   /**
    * 三段各自兜错，不用 Promise.all：
@@ -208,11 +205,6 @@ export function SettingsPage(props: { onError: (message: string) => void }) {
     }
     try {
       setRouting(await api.routing());
-    } catch (error) {
-      props.onError((error as Error).message);
-    }
-    try {
-      setCustomPrompt((await api.promptSettings()).custom);
     } catch (error) {
       props.onError((error as Error).message);
     }
@@ -356,51 +348,11 @@ export function SettingsPage(props: { onError: (message: string) => void }) {
 
       <DsFreeLoginPanel onError={props.onError} onApplied={() => void refresh()} />
 
-      <h2>对话提示词（可选）</h2>
+      <h2>对话提示词</h2>
       <p className="hint">
-        这里写的要求会追加进每次对话的「系统约束」那一段，<strong>对所有角色生效</strong>；
-        只针对某个角色的设定请去「角色」里改它的 system prompt。留空表示不用。
+        已经挪到「角色」页：在那里可以给<strong>每个角色</strong>写一份自己的要求（改完下一句就生效），
+        也可以设一份所有角色通用的默认——角色没写自己的那份时用默认。
       </p>
-      <textarea
-        className="prompt-input"
-        value={customPrompt}
-        onChange={(event) => {
-          setCustomPrompt(event.target.value);
-          setPromptSaved(null);
-        }}
-        placeholder="例如：说话短一点，别用感叹号；称呼我「你」就好，不要叫先生女士。"
-        rows={4}
-        maxLength={4000}
-      />
-      <div className="row">
-        <button
-          onClick={() =>
-            void api
-              .savePromptSettings(customPrompt)
-              .then((saved) => {
-                setCustomPrompt(saved.custom);
-                setPromptSaved(saved.custom.length === 0 ? "已清空。" : "已保存，下一句起生效。");
-              })
-              .catch((error: Error) => props.onError(error.message))
-          }
-        >
-          保存提示词
-        </button>
-        <button
-          className="ghost"
-          disabled={customPrompt.length === 0}
-          onClick={() => {
-            setCustomPrompt("");
-            void api
-              .savePromptSettings("")
-              .then(() => setPromptSaved("已清空。"))
-              .catch((error: Error) => props.onError(error.message));
-          }}
-        >
-          清空
-        </button>
-        {promptSaved !== null && <span className="hint">{promptSaved}</span>}
-      </div>
 
       <h2>已配置的模型</h2>
       <ul className="cards">

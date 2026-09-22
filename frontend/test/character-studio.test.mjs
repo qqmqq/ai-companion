@@ -94,6 +94,11 @@ function installApi() {
       state.conversations.push(body);
       return json({ id: "conv-new", characterId: body.characterId, title: "新会话", source: "web", channel: "web", lastMessageAt: null, lastMessageText: "", characterVersionId: "v3" }, 201);
     }
+    // 角色页现在一挂载就读「默认提示词」与该角色的提示词（编辑器搬过来了）
+    if (path.endsWith("/api/context/prompt")) return json({ custom: state.defaultPrompt ?? "", appliesTo: "系统约束（对所有角色生效）" });
+    if (path.endsWith("/api/characters/" + EXISTING.id + "/prompt")) {
+      return json({ prompt: state.characterPrompt ?? "", fallback: state.defaultPrompt ?? "" });
+    }
     if (path.endsWith("/api/characters") && method === "GET") return json({ items: [EXISTING] });
     throw new Error("unexpected request: " + method + " " + path);
   };
@@ -227,6 +232,11 @@ test("参数被后端拒绝时，界面把真实原因说出来（不再只显�
         JSON.stringify({ error: { code: "invalid_input", message: "请求参数不合法：ideas 最多 2000 个字", details: { issues: [{ path: "ideas", message: "ideas 最多 2000 个字" }] } } }),
         { status: 400, headers: { "content-type": "application/json" } },
       );
+    }
+    // 角色页现在一挂载就读「默认提示词」与该角色的提示词（编辑器搬过来了）
+    if (path.endsWith("/api/context/prompt")) return json({ custom: state.defaultPrompt ?? "", appliesTo: "系统约束（对所有角色生效）" });
+    if (path.endsWith("/api/characters/" + EXISTING.id + "/prompt")) {
+      return json({ prompt: state.characterPrompt ?? "", fallback: state.defaultPrompt ?? "" });
     }
     if (path.endsWith("/api/characters") && method === "GET") return json({ items: [EXISTING] });
     throw new Error("unexpected request: " + method + " " + path);
