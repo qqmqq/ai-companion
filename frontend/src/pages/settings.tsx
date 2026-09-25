@@ -164,7 +164,7 @@ function RouteRow(props: {
           onChange={setModel}
           placeholder="模型名，例如 gpt-5-mini / qwen-plus / qwen3"
         />
-        <button disabled={busy} onClick={() => void save()}>
+        <button aria-busy={busy} disabled={busy} onClick={() => void save()}>
           {busy ? "保存中…" : "应用"}
         </button>
       </div>

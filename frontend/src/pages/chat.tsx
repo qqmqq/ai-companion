@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { api } from "../lib/api.ts";
 import type { CharacterDto, ContextPreviewDto, ConversationDto, MessageDto } from "../lib/types.ts";
 import { audioTranscription, mediaPlaceholders } from "../lib/parts.ts";
+import { MicIcon, SpeakerIcon } from "../lib/icons.tsx";
 
 /** 会话来源的中文标签：来源是会话自身的属性，不混进角色名 */
 const SOURCE_LABELS: Record<string, string> = { web: "网页", weixin: "微信" };
@@ -156,7 +157,15 @@ export function ChatPage(props: {
         {props.conversations.length === 0 && <p className="hint">还没有会话：到「角色」页点「开始聊天」新建一个。</p>}
       </div>
 
-      <div className="messages" ref={listRef}>
+      {/* role="log" 是聊天记录的标准语义：新消息会被读屏念出来；正在流式生成时标 busy，免得半句话半句话地念 */}
+      <div
+        className="messages"
+        ref={listRef}
+        role="log"
+        aria-live="polite"
+        aria-busy={props.streamingText.length > 0}
+        aria-label="对话记录"
+      >
         {messages.map((message) => (
           <div key={message.id} className={message.role === "user" ? "message user" : "message character"}>
             <span className="role">
@@ -177,7 +186,10 @@ export function ChatPage(props: {
             {/* Phase 4.5-D4：助手回复的语音状态（只做展示；不自动重新生成） */}
             {message.role !== "user" && message.tts !== undefined && (
               <div className="meta">
-                <span className="tag">🔊 语音</span>
+                <span className="tag">
+                  <SpeakerIcon />
+                  语音
+                </span>
                 {message.tts.status === "completed" && <span className="hint">语音已生成</span>}
                 {(message.tts.status === "processing" || message.tts.status === "pending") && <span className="hint">语音生成中…</span>}
                 {message.tts.status === "failed" && <span className="hint">语音不可用</span>}
@@ -210,7 +222,10 @@ export function ChatPage(props: {
                 if (view.kind === "none" && !mediaUnavailable) return null;
                 return (
                   <div key={"asr-" + String(index)} className="meta">
-                    <span className="tag">🎤 语音消息</span>
+                    <span className="tag">
+                      <MicIcon />
+                      语音消息
+                    </span>
                     {mediaUnavailable && <span className="hint">音频不可用</span>}
                     {!mediaUnavailable && view.kind === "pending" && <span className="hint">转写中…</span>}
                     {!mediaUnavailable && view.kind === "completed" && <span className="transcript">{view.text}</span>}

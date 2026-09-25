@@ -47,6 +47,9 @@ function CharacterForm(props: {
   onChange?: (input: CharacterDefinitionInput) => void;
 }) {
   const [draft, setDraft] = useState<CharacterDefinitionInput>(props.initial);
+  /** 名字为空是唯一会挡住提交的规则：先让人填过再报错，别一打开就一片红 */
+  const [nameTouched, setNameTouched] = useState(false);
+  const nameMissing = draft.name.trim().length === 0;
   const update = (next: CharacterDefinitionInput) => {
     setDraft(next);
     props.onChange?.(next);
@@ -63,7 +66,19 @@ function CharacterForm(props: {
     <div className="editor">
       <label className="field">
         <span className="hint">角色名称</span>
-        <input value={draft.name} onChange={(event) => update({ ...draft, name: event.target.value })} placeholder="例如：Aria" />
+        <input
+          value={draft.name}
+          onChange={(event) => update({ ...draft, name: event.target.value })}
+          onBlur={() => setNameTouched(true)}
+          aria-invalid={nameTouched && nameMissing}
+          aria-describedby={nameTouched && nameMissing ? "character-name-error" : undefined}
+          placeholder="例如：Aria"
+        />
+        {nameTouched && nameMissing && (
+          <p className="field-error" id="character-name-error">
+            角色名称不能为空：先给它起个名字。
+          </p>
+        )}
       </label>
       {field("描述 / 身份", "description", 3, "这个角色是谁")}
       {field("性格", "personality", 2, "说话与反应的方式")}
@@ -72,6 +87,7 @@ function CharacterForm(props: {
       {field("开场白", "firstMessage", 3, "新会话里角色的第一句话")}
       <div className="row">
         <button
+          aria-busy={props.busy}
           disabled={props.busy || draft.name.trim().length === 0}
           onClick={() => void props.onSubmit({ ...draft, name: draft.name.trim() })}
         >
@@ -204,7 +220,7 @@ function CharacterPromptEditor(props: { character: CharacterDto; onError: (messa
         />
       </label>
       <div className="row">
-        <button disabled={busy || text === null} onClick={() => void save(value)}>
+        <button aria-busy={busy} disabled={busy || text === null} onClick={() => void save(value)}>
           {busy ? "保存中…" : "保存对话提示词"}
         </button>
         <button className="ghost" disabled={busy || value.length === 0} onClick={() => void save("")}>
@@ -391,7 +407,7 @@ function CharacterStudio(props: {
             </span>
           </label>
           <div className="row">
-            <button disabled={working || props.busy || ideas.trim().length === 0} onClick={() => run(async () => {
+            <button aria-busy={working} disabled={working || props.busy || ideas.trim().length === 0} onClick={() => run(async () => {
               const result = await api.draftCharacter({ ideas: ideas.trim() });
               setTurns([{ role: "user", text: ideas.trim() }]);
               show(result);
@@ -455,6 +471,7 @@ function CharacterStudio(props: {
               }}
             />
             <button
+              aria-busy={working}
               disabled={working || instruction.trim().length === 0 || draft.name.trim().length === 0}
               onClick={() => {
                 const text = instruction.trim();

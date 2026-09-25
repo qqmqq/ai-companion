@@ -186,7 +186,7 @@ export function DsFreeLoginPanel(props: { onError: (message: string) => void; on
       </ul>
 
       <div className="row">
-        <button disabled={busy} onClick={() => void handleStart()}>
+        <button aria-busy={busy} disabled={busy} onClick={() => void handleStart()}>
           {busy ? "处理中…" : captured ? "重新打开登录页并获取" : "打开登录页并自动获取"}
         </button>
         <button className="ghost" disabled={busy || status?.phase !== "waiting_login"} onClick={() => void run(() => api.dsFreeStop())}>
@@ -237,7 +237,7 @@ export function DsFreeLoginPanel(props: { onError: (message: string) => void; on
           </label>
         )}
       </div>
-      <button disabled={!canApply} onClick={() => void handleApply()}>
+      <button aria-busy={busy && canApply} disabled={!canApply} onClick={() => void handleApply()}>
         {busy ? "正在写入…" : "一键写入并配好 provider"}
       </button>
       {!captured && <p className="hint">先点上面的按钮拿到设备指纹，这里的写入才会生效。</p>}

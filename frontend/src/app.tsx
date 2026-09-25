@@ -121,10 +121,12 @@ export function App() {
       </header>
 
       {error !== null && (
-        // 出错横幅做成警报区：出现时读屏器会念出来，点一下即可关掉
-        <div className="error" role="alert" onClick={() => setError(null)}>
-          出错了：{error}
-          <span className="hint">（点击关闭）</span>
+        // 出错横幅做成警报区：出现时读屏器会念出来；关闭是一个真按钮，键盘也按得到
+        <div className="error" role="alert">
+          <span>出错了：{error}</span>
+          <button type="button" className="link error-close" onClick={() => setError(null)}>
+            关闭
+          </button>
         </div>
       )}
 
