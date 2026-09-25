@@ -50,3 +50,25 @@ export function MicIcon(props: IconProps) {
     </svg>
   );
 }
+
+/** 标题旁的小星：纯装饰，所以 aria-hidden */
+export function SparkleIcon(props: IconProps) {
+  const size = props.size ?? 16;
+  return (
+    <svg
+      width={size}
+      height={size}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={1.7}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+      focusable="false"
+    >
+      <path d="M12 3.5 13.9 9.4 19.8 11.3 13.9 13.2 12 19.1 10.1 13.2 4.2 11.3 10.1 9.4z" />
+      <path d="M18.5 4.2v2.2M17.4 5.3h2.2" />
+    </svg>
+  );
+}

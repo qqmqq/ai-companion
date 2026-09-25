@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { api, type StreamEvent } from "./lib/api.ts";
+import { SparkleIcon } from "./lib/icons.tsx";
 import type { CharacterDto, ConversationDto } from "./lib/types.ts";
 import { CharactersPage } from "./pages/characters.tsx";
 import { ChatPage } from "./pages/chat.tsx";
@@ -92,7 +93,11 @@ export function App() {
   return (
     <div className="app">
       <header>
-        <h1>AI Companion</h1>
+        {/* 标题旁的小星是装饰：语义由 h1 的文字承担 */}
+        <h1 className="brand">
+          <SparkleIcon />
+          AI Companion
+        </h1>
         {/* aria-current 让读屏器知道当前在哪一页 */}
         <nav aria-label="主导航">
           {(
