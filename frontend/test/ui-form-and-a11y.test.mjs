@@ -139,7 +139,8 @@ test("样式表里：可操作控件的边框有专门令牌，不是靠装饰�
   const { readFile } = await import("node:fs/promises");
   const css = await readFile(new URL("../src/styles.css", import.meta.url), "utf8");
   assert.match(css, /--line-control:\s*#[0-9a-f]{6}/i, "控件边框要有自己的令牌");
-  assert.match(css, /border: 1px solid var\(--line-control\)/, "表单控件用控件令牌");
+  // 边框宽度随主题变（这一版是 2px 粗边），但"走令牌、不写死颜色"这条不变
+  assert.match(css, /border: \d+px solid var\(--line-control\)/, "表单控件用控件令牌");
   assert.match(css, /\.field-error/, "表单错误要有样式");
   assert.match(css, /prefers-reduced-motion/, "要尊重系统的减少动效设置");
   assert.match(css, /:focus-visible/, "键盘焦点要看得见");

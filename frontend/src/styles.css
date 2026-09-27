@@ -1,43 +1,49 @@
 /*
  * 界面样式总表。
  *
- * 目标：暗色、久看不累、每一个可点的东西都有明确的悬停与焦点反馈。
+ * 风格：都市机能风 —— 近黑底、白色贴纸、单一荧光绿强调、粗黑边、硬边投影（不是模糊阴影）、
+ * 45 度警戒条纹、网点底。参考对象是《绝区零》那类游戏界面的语言（黑/白/一支荧光色、方角、贴纸感），
+ * 不是照搬它的素材 —— 全部是 CSS 画的。
  * 组织方式：先是设计令牌，再是基础元素，最后是各页面的积木。
  * 颜色一律走令牌，不要在组件里写死十六进制 —— 换色只改这一处。
+ * 对比度不是靠眼睛定的：frontend/test/theme-contrast.test.mjs 会把令牌算成比值来卡门槛。
  */
 :root {
   color-scheme: dark;
 
-  /* 表面：夜色分层。深紫底 + 樱花粉 + 天空蓝 —— 二次元夜景的老配方 */
-  --bg: #0f0b1a;
-  --bg-glow-a: rgba(255, 138, 199, 0.14); /* 樱花 */
-  --bg-glow-b: rgba(127, 215, 255, 0.12); /* 天空 */
-  --bg-glow-c: rgba(150, 110, 255, 0.12); /* 紫 */
-  --star: rgba(255, 255, 255, 0.5);
-  --panel: #17132a;
-  --panel-2: #1e1836;
-  --field: #120e22;
-  --sheen: rgba(255, 255, 255, 0.05); /* 玻璃顶部那一道反光 */
+  /*
+   * 表面：近黑底 + 白色贴纸 + 荧光绿。参考「绝区零」的界面语言 ——
+   * 黑底、油墨感的粗黑边、硬边投影（不是模糊阴影）、斜切色块、网点和警戒条纹，
+   * 强调色只用一支荧光绿 + 一支洋红，不做渐变过渡色。
+   */
+  --bg: #0b0b0d;
+  --panel: #141417;
+  --panel-2: #1b1b20;
+  --field: #101013;
+  --paper: #f5f5f2; /* 白卡：贴纸、标签、角色一侧的气泡 */
+  --ink: #0a0a0c; /* 压在白卡/荧光绿上的字：18.1:1 / 15.9:1 */
+  --muted-ink: #4f4f58; /* 白卡上的次要文字：7.4:1 */
+  --halftone: rgba(255, 255, 255, 0.05); /* 网点 */
 
-  --line: #2c2545; /* 纯装饰分隔线：靠表面层次区分区块，不靠描边 */
-  --line-control: #6b6390; /* 可操作控件的静止边框：对 --panel 3.28:1、对 --bg 3.52:1 */
-  --line-strong: #8d85b8; /* 悬停态与弹窗边界：对 --panel 5.31:1 */
+  --line: #2a2a30; /* 纯装饰分隔线：靠表面层次区分区块，不靠描边 */
+  --line-control: #6e6e7a; /* 可操作控件的静止边框：对 --panel 3.65:1、对 --bg 3.91:1 */
+  --line-strong: #a0a0ac; /* 悬停态与弹窗边界：对 --panel 7.11:1 */
 
-  /* 正文与次要文字：对 --panel 实测 15.9:1 与 8.0:1，都在 4.5:1 之上 */
-  --text: #f2eeff;
-  --muted: #b0a8cf;
+  /* 正文与次要文字：对 --panel 实测 16.7:1 与 8.4:1，都在 4.5:1 之上 */
+  --text: #f4f4f4;
+  --muted: #adaeba;
 
-  --accent: #ff8ac7; /* 樱花粉：主按钮与角色一侧 */
-  --accent-2: #7fd7ff; /* 天空蓝：次要强调、焦点圈、自己说的话 */
-  --accent-ink: #221033; /* 压在粉上的字：8.16:1 */
-  --accent-soft: rgba(255, 138, 199, 0.16);
-  --accent-2-soft: rgba(127, 215, 255, 0.14);
+  --accent: #d7f42c; /* 荧光绿：主按钮、选中态、强调（对 --panel 14.8:1） */
+  --accent-2: #ff2f88; /* 洋红：焦点圈、危险/强调的第二支（对 --panel 5.3:1） */
+  --accent-ink: #0a0a0c; /* 压在荧光绿上的字：15.9:1 */
+  --accent-soft: rgba(215, 244, 44, 0.14);
 
-  --ok: #7ef0b8;
-  --warn: #ffd98a;
-  --danger: #ff9aa8;
-  --danger-line: #7a3550;
-  --danger-bg: #2c1424;
+  --ok: #b6f24a;
+  --warn: #ffb52e;
+  --danger: #ff5f7a;
+  --danger-ink: #a01236; /* 白卡上的错误文字：7.6:1 */
+  --danger-line: #7a2438;
+  --danger-bg: #241017;
 
   /* 间距与圆角：4 / 8 的节奏，不要再出现 5px、13px 这种数 */
   --sp-1: 4px;
@@ -46,18 +52,20 @@
   --sp-4: 16px;
   --sp-5: 24px;
   --sp-6: 32px;
-  --r-sm: 10px;
-  --r-md: 14px;
-  --r-lg: 20px;
-  --r-pill: 999px;
+  --r-sm: 2px; /* 几乎是直角：这套界面语言里没有圆角 */
+  --r-md: 3px;
+  --r-pill: 999px; /* 只留给真正需要胶囊的地方（头像、圆点） */
 
-  --shadow-1: 0 2px 10px rgba(10, 4, 24, 0.5);
-  --shadow-2: 0 26px 64px rgba(8, 3, 20, 0.66);
-  --glow-soft: 0 0 18px rgba(255, 138, 199, 0.20);
-  --glow-accent: 0 6px 22px rgba(255, 138, 199, 0.32);
-  --glow-cyan: 0 0 16px rgba(127, 215, 255, 0.22);
+  --shadow-1: 0 1px 0 rgba(0, 0, 0, 0.6);
+  --shadow-2: 0 18px 40px rgba(0, 0, 0, 0.6);
+  /* 硬边投影：偏移的实心块，不用模糊 —— 贴纸/油墨的感觉全靠这个 */
+  --shadow-hard: 4px 4px 0 var(--ink);
+  --shadow-hard-sm: 2px 2px 0 var(--ink);
+  --shadow-hard-lime: 4px 4px 0 var(--accent);
+  /* 45 度警戒条纹：斜切色块的替代品，比 clip-path 便宜且不裁内容 */
+  --hazard: repeating-linear-gradient(45deg, var(--accent) 0 6px, transparent 6px 12px);
 
-  --dur: 160ms;
+  --dur: 120ms; /* 反馈是「啪」的一下，不是慢慢过渡 */
   --ease: cubic-bezier(0.2, 0.7, 0.3, 1);
   --header-h: 62px;
 }
@@ -65,10 +73,11 @@
 * { box-sizing: border-box; }
 
 /* 键盘用户的焦点圈：任何可操作的东西都要看得见（鼠标点击不会触发它） */
+/* 键盘焦点：洋红实心描边 + 一层很淡的同色外圈。方角、够粗，符合这套界面的语言 */
 :where(button, input, textarea, select, summary, a, [tabindex]):focus-visible {
-  outline: 2px solid var(--accent-2);
+  outline: 3px solid var(--accent-2);
   outline-offset: 2px;
-  box-shadow: 0 0 0 4px rgba(127, 215, 255, 0.18);
+  box-shadow: 0 0 0 6px rgba(255, 47, 136, 0.22);
 }
 
 html { scroll-padding-top: calc(var(--header-h) + 12px); }
@@ -77,16 +86,11 @@ body {
   margin: 0;
   min-height: 100vh;
   background:
-    /* 星点：几个静止的小亮点，够有夜色又不抢内容 */
-    radial-gradient(1.6px 1.6px at 16% 18%, var(--star), transparent 60%),
-    radial-gradient(1.4px 1.4px at 71% 9%, rgba(255, 255, 255, 0.42), transparent 60%),
-    radial-gradient(1.2px 1.2px at 38% 62%, rgba(255, 255, 255, 0.34), transparent 60%),
-    radial-gradient(1.4px 1.4px at 86% 47%, rgba(255, 255, 255, 0.32), transparent 60%),
-    radial-gradient(1.2px 1.2px at 9% 78%, rgba(255, 255, 255, 0.3), transparent 60%),
-    radial-gradient(1.2px 1.2px at 57% 88%, rgba(255, 255, 255, 0.26), transparent 60%),
-    radial-gradient(1100px 520px at 12% -10%, var(--bg-glow-a), transparent 62%),
-    radial-gradient(900px 480px at 88% 2%, var(--bg-glow-b), transparent 60%),
-    radial-gradient(1000px 700px at 50% 118%, var(--bg-glow-c), transparent 66%),
+    /* 网点：印刷网点感，很淡，只在近处看得出 */
+    radial-gradient(circle at center, var(--halftone) 1px, transparent 1.6px) 0 0 / 14px 14px,
+    /* 两道斜切色带：荧光绿与洋红，压在角落，像贴上去的色块 */
+    linear-gradient(115deg, transparent 0 64%, rgba(215, 244, 44, 0.05) 64% 70%, transparent 70%),
+    linear-gradient(115deg, transparent 0 28%, rgba(255, 47, 136, 0.045) 28% 32%, transparent 32%),
     var(--bg);
   background-attachment: fixed;
   color: var(--text);
@@ -110,34 +114,52 @@ header {
   flex-wrap: wrap;
   padding: var(--sp-3) 0;
   margin-bottom: var(--sp-2);
-  background: linear-gradient(180deg, rgba(15, 11, 26, 0.94), rgba(15, 11, 26, 0.72));
-  backdrop-filter: blur(14px) saturate(1.2);
+  background: rgba(11, 11, 13, 0.94);
+  backdrop-filter: blur(10px);
   border-bottom: 1px solid var(--line);
 }
-/* 标题：粉→蓝的渐变字。用 @supports 兜底，万一不支持也只是变回单色，不会看不见 */
-@supports (background-clip: text) or (-webkit-background-clip: text) {
-  h1 {
-    background: linear-gradient(115deg, #ffd9ef 0%, var(--accent) 45%, var(--accent-2) 100%);
-    -webkit-background-clip: text;
-    background-clip: text;
-    color: transparent;
-  }
+/* 底部那条 45 度警戒线：整套界面里最省事的机械感来源 */
+header::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: -1px;
+  height: 3px;
+  background: var(--hazard);
+  pointer-events: none;
 }
+/* 标题不做渐变字了：这一版是白字 + 荧光绿硬边投影，再斜一点 */
 
-h1 { font-size: 20px; margin: 0; letter-spacing: 0.02em; font-weight: 700; }
+h1 {
+  font-size: 21px;
+  margin: 0;
+  letter-spacing: 0.04em;
+  font-weight: 800;
+  text-transform: uppercase;
+  text-shadow: 3px 3px 0 var(--accent);
+  transform: skewX(-6deg);
+}
 /* 标题旁边的小星：装饰，不承载信息 */
 .brand { display: inline-flex; align-items: center; gap: var(--sp-2); }
-.brand svg { color: var(--accent); filter: drop-shadow(0 0 6px rgba(255, 138, 199, 0.5)); }
-h2 { font-size: 15px; color: var(--muted); font-weight: 600; margin: var(--sp-5) 0 var(--sp-3); }
+.brand svg { color: var(--accent); }
+.brand > svg { transform: skewX(6deg); } /* 字斜了，图标别再跟着歪 */
+h2 {
+  font-size: 15px;
+  color: var(--text);
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  margin: var(--sp-5) 0 var(--sp-3);
+}
 h2::before {
   content: "";
   display: inline-block;
-  width: 4px;
-  height: 13px;
+  width: 14px;
+  height: 12px;
   margin-right: var(--sp-2);
-  border-radius: var(--r-pill);
-  vertical-align: -2px;
-  background: linear-gradient(180deg, var(--accent), var(--accent-2));
+  vertical-align: -1px;
+  background: var(--hazard);
 }
 h3 { font-size: 14px; margin: var(--sp-3) 0 var(--sp-2); }
 p { margin: var(--sp-2) 0; }
@@ -145,37 +167,49 @@ p { margin: var(--sp-2) 0; }
 nav { display: flex; gap: var(--sp-2); flex-wrap: wrap; }
 nav button, .conversations button, .ghost {
   background: transparent;
-  color: var(--muted);
-  border: 1px solid var(--line-control);
-  border-radius: var(--r-pill);
-  padding: 6px 16px;
-  font-weight: 500;
+  color: var(--text);
+  border: 2px solid var(--line-control);
+  border-radius: var(--r-sm);
+  padding: 6px 14px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
   cursor: pointer;
-  transition: color var(--dur) var(--ease), border-color var(--dur) var(--ease), background-color var(--dur) var(--ease);
+  box-shadow: none;
+  transition: color var(--dur) var(--ease), border-color var(--dur) var(--ease), background-color var(--dur) var(--ease), transform var(--dur) var(--ease);
 }
 nav button:hover, .conversations button:hover, .ghost:hover:not(:disabled) {
-  color: var(--text);
-  border-color: var(--accent-2);
-  background: var(--accent-2-soft);
-}
-nav button.active, .conversations button.active {
-  color: var(--text);
+  color: var(--accent);
   border-color: var(--accent);
-  background: linear-gradient(135deg, rgba(255, 138, 199, 0.24), rgba(127, 215, 255, 0.16));
-  box-shadow: var(--glow-soft);
+  background: var(--accent-soft);
+  transform: none;
+}
+/* 选中的页签：整块荧光绿 + 黑字 + 黑边，最像绝区零的一处 */
+nav button.active, .conversations button.active {
+  color: var(--accent-ink);
+  border-color: var(--accent-ink);
+  background: var(--accent);
+  box-shadow: 2px 2px 0 var(--accent-ink);
 }
 
 .panel {
+  position: relative;
   background: var(--panel);
   border: 1px solid var(--line);
-  border-radius: var(--r-lg);
+  border-radius: var(--r-md);
   padding: 18px;
   margin-top: var(--sp-4);
   box-shadow: var(--shadow-1);
 }
-/* 玻璃质感：顶部一道很淡的反光。比整块发光便宜，也不影响文字对比度 */
-.panel, .editor, .cards li, .card-preview, .stage-card, .prompt-default, .context-section {
-  background-image: linear-gradient(180deg, var(--sheen), transparent 38%);
+/* 左上角的荧光绿角标：一块小斜纹色块，替代原来的玻璃反光 */
+.panel::before {
+  content: "";
+  position: absolute;
+  top: -1px;
+  left: -1px;
+  width: 42px;
+  height: 5px;
+  background: var(--hazard);
+  pointer-events: none;
 }
 .hint { color: var(--muted); font-size: 13px; }
 .error {
@@ -184,8 +218,8 @@ nav button.active, .conversations button.active {
   align-items: baseline;
   justify-content: space-between;
   background: var(--danger-bg);
-  border: 1px solid var(--danger-line);
-  color: #ffdbe3;
+  border: 2px solid var(--danger-line);
+  color: #ffd9e2;
   padding: 10px 12px;
   border-radius: var(--r-sm);
   margin-top: var(--sp-4);
@@ -197,52 +231,59 @@ textarea, input, select {
   width: 100%;
   background: var(--field);
   color: var(--text);
-  border: 1px solid var(--line-control);
-  border-radius: var(--r-md);
+  border: 2px solid var(--line-control);
+  border-radius: var(--r-sm);
   padding: 9px 12px;
   font-size: 13.5px;
   font-family: inherit;
   transition: border-color var(--dur) var(--ease), background-color var(--dur) var(--ease);
 }
 textarea:hover:not(:disabled), input:hover:not(:disabled), select:hover:not(:disabled) { border-color: var(--line-strong); }
-textarea:focus, input:focus, select:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(255, 138, 199, 0.16); }
+textarea:focus, input:focus, select:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(215, 244, 44, 0.18); }
 textarea { font-family: ui-monospace, SFMono-Regular, Consolas, monospace; line-height: 1.7; resize: vertical; }
 textarea:disabled, input:disabled, select:disabled { opacity: 0.6; }
 ::placeholder { color: var(--muted); opacity: 0.75; }
 
 button {
   min-height: 36px;
-  background: linear-gradient(135deg, var(--accent), #b98cff);
+  background: var(--accent);
   color: var(--accent-ink);
-  box-shadow: var(--glow-soft);
-  border: none;
-  border-radius: var(--r-pill);
+  border: 2px solid var(--accent-ink);
+  border-radius: var(--r-sm);
   padding: 8px 18px;
   font: inherit;
-  font-weight: 600;
+  font-weight: 800;
+  letter-spacing: 0.03em;
   cursor: pointer;
-  transition: filter var(--dur) var(--ease), transform var(--dur) var(--ease), opacity var(--dur) var(--ease), border-color var(--dur) var(--ease);
+  box-shadow: 3px 3px 0 var(--accent-2);
+  transition: transform var(--dur) var(--ease), box-shadow var(--dur) var(--ease), opacity var(--dur) var(--ease), border-color var(--dur) var(--ease), background-color var(--dur) var(--ease), color var(--dur) var(--ease);
 }
-button:hover:not(:disabled) { filter: brightness(1.06); box-shadow: var(--glow-accent); }
-button:active:not(:disabled) { transform: translateY(1px); }
+/* 悬停抬一点、按下压到底：位移只有几像素，但不改变布局尺寸 */
+button:hover:not(:disabled) { transform: translate(-1px, -1px); box-shadow: 5px 5px 0 var(--accent-2); }
+button:active:not(:disabled) { transform: translate(3px, 3px); box-shadow: 0 0 0 var(--accent-2); }
+
 button:disabled { opacity: 0.45; cursor: not-allowed; }
 button.danger {
-  background: transparent;
-  border: 1px solid var(--danger-line);
-  color: var(--danger);
-  font-weight: 500;
-  box-shadow: none;
+  background: var(--accent-2);
+  border: 2px solid var(--accent-ink);
+  color: var(--accent-ink);
+  font-weight: 800;
+  box-shadow: 3px 3px 0 var(--accent-ink);
 }
-button.danger:hover:not(:disabled) { background: var(--danger-bg); }
+button.danger:hover:not(:disabled) { background: var(--accent-2); box-shadow: 5px 5px 0 var(--accent-ink); }
 button.link {
   min-height: 0;
   background: none;
   border: none;
+  border-radius: 0;
   padding: 0;
   color: var(--accent);
-  font-weight: 500;
-  text-decoration: underline dotted;
+  font-weight: 700;
+  box-shadow: none;
+  text-decoration: underline;
+  text-underline-offset: 3px;
 }
+button.link:hover:not(:disabled) { transform: none; box-shadow: none; text-decoration-thickness: 2px; }
 .ok-text { color: var(--ok); font-size: 13px; }
 .warn { color: var(--warn); font-size: 12px; }
 
@@ -273,32 +314,35 @@ button.link {
 .tag svg { vertical-align: -2px; margin-right: 4px; }
 
 .editor {
-  border: 1px solid var(--line);
+  border: 2px solid var(--line);
   border-radius: var(--r-md);
-  background: rgba(255, 255, 255, 0.015);
+  background: var(--panel-2);
   padding: var(--sp-4);
   margin: var(--sp-3) 0;
 }
 
 .cards { list-style: none; padding: 0; display: grid; gap: var(--sp-3); margin: var(--sp-2) 0; }
 .cards li {
-  border: 1px solid var(--line);
+  border: 2px solid var(--line);
   border-radius: var(--r-md);
   background: var(--panel-2);
   padding: var(--sp-3) var(--sp-4);
   transition: border-color var(--dur) var(--ease);
 }
-.cards li:hover { border-color: var(--accent); box-shadow: var(--glow-soft); transform: translateY(-1px); }
+.cards li:hover { border-color: var(--accent); box-shadow: var(--shadow-hard-lime); transform: translate(-2px, -2px); }
 .cards li { transition: border-color var(--dur) var(--ease), box-shadow var(--dur) var(--ease), transform var(--dur) var(--ease); }
 .cards .meta, .meta { display: flex; gap: var(--sp-3); color: var(--muted); font-size: 12px; margin: 6px 0; flex-wrap: wrap; }
 .cards .empty { color: var(--muted); border-style: dashed; background: transparent; }
 .score { color: var(--muted); font-size: 12px; }
+/* 标签做成白贴纸：白底黑字黑边，跟深色底对比拉满（18:1） */
 .tag {
-  color: var(--accent);
-  border: 1px solid rgba(255, 138, 199, 0.32);
-  background: var(--accent-soft);
-  border-radius: var(--r-pill);
+  color: var(--ink);
+  background: var(--paper);
+  border: 2px solid var(--ink);
+  border-radius: var(--r-sm);
   padding: 1px 8px;
+  font-weight: 700;
+  font-size: 11px;
 }
 /* Phase 4.5-D3：语音转写文本 */
 .transcript { color: var(--text); font-size: 14px; }
@@ -313,32 +357,39 @@ button.link {
   margin-bottom: var(--sp-3);
   padding-right: 4px;
   scrollbar-width: thin;
-  scrollbar-color: var(--line-strong) transparent;
+  scrollbar-color: var(--accent) transparent;
 }
 .messages::-webkit-scrollbar { width: 10px; }
-.messages::-webkit-scrollbar-thumb { background: linear-gradient(180deg, var(--accent), #b98cff); border-radius: 999px; border: 3px solid transparent; background-clip: content-box; }
+.messages::-webkit-scrollbar-thumb { background: var(--accent); border-radius: 0; border: 3px solid transparent; background-clip: content-box; }
+/* 气泡做成贴纸：粗黑边 + 硬边投影。角色一侧白卡，自己一侧荧光绿 */
 .message {
-  border: 1px solid var(--line-control);
-  border-radius: var(--r-md);
+  border: 2px solid var(--ink);
+  border-radius: var(--r-sm);
   padding: 10px 14px;
   max-width: 78%;
-  transition: border-color var(--dur) var(--ease), box-shadow var(--dur) var(--ease);
+  box-shadow: var(--shadow-hard-sm);
+  transition: box-shadow var(--dur) var(--ease), transform var(--dur) var(--ease);
 }
 /* 自己说的话靠右：一屏里立刻分得清谁在说。两侧各留一个直角，气泡尾巴的意思就有了 */
 .message.user {
-  background: linear-gradient(135deg, rgba(127, 215, 255, 0.18), rgba(127, 215, 255, 0.06));
-  border-color: rgba(127, 215, 255, 0.45);
-  border-bottom-right-radius: var(--r-sm);
+  background: var(--accent);
+  color: var(--accent-ink);
+  border-bottom-right-radius: 0;
   margin-left: auto;
+  box-shadow: 3px 3px 0 var(--accent-2);
 }
 .message.character {
-  background: linear-gradient(135deg, rgba(255, 138, 199, 0.16), rgba(185, 140, 255, 0.07));
-  border-color: rgba(255, 138, 199, 0.38);
-  border-bottom-left-radius: var(--r-sm);
+  background: var(--paper);
+  color: var(--ink);
+  border-bottom-left-radius: 0;
   margin-right: auto;
 }
-.message.streaming { border-color: var(--accent); }
-.message .role { font-size: 12px; color: var(--muted); display: block; margin-bottom: var(--sp-1); }
+.message.streaming { box-shadow: 4px 4px 0 var(--accent-2); }
+.message .role { font-size: 12px; display: block; margin-bottom: var(--sp-1); }
+/* 气泡里的小字必须跟着气泡的底走：白卡上用深灰，荧光绿上用黑 */
+.message.character .role, .message.character .hint { color: var(--muted-ink); }
+.message.user .role, .message.user .hint { color: var(--accent-ink); opacity: 0.78; }
+.message .warn { color: var(--danger-ink); }
 .message .role::before {
   content: "";
   display: inline-block;
@@ -349,8 +400,10 @@ button.link {
   vertical-align: 1px;
   background: var(--accent);
 }
-.message.user .role::before { background: var(--accent-2); }
+.message.user .role::before { background: var(--accent-ink); }
 .message p { margin: 0; white-space: pre-wrap; }
+/* 气泡里的标签反过来：黑底白字，白贴纸压在白卡上会消失 */
+.message .tag { background: var(--ink); color: var(--paper); border-color: var(--ink); }
 .message.streaming .role::after {
   content: "";
   display: inline-block;
@@ -371,8 +424,8 @@ button.link {
   max-height: 75vh;
   overflow-y: auto;
   background: var(--panel-2);
-  border: 1px solid var(--line-strong);
-  border-radius: var(--r-lg);
+  border: 3px solid var(--line-strong);
+  border-radius: var(--r-md);
   padding: 18px;
   box-shadow: var(--shadow-2);
   z-index: 30;
@@ -387,7 +440,7 @@ button.link {
   font-size: 12px;
 }
 
-.context-section { border: 1px solid var(--line); border-radius: var(--r-md); padding: 10px 12px; margin: var(--sp-2) 0; background: var(--panel); }
+.context-section { border: 2px solid var(--line); border-radius: var(--r-md); padding: 10px 12px; margin: var(--sp-2) 0; background: var(--panel); }
 .search-results { border: 1px dashed var(--line); border-radius: var(--r-md); padding: 10px 12px; margin: var(--sp-3) 0; }
 .memory-card { border-bottom: 1px solid var(--line); padding: 6px 0; }
 .memory-card:last-child { border-bottom: none; }
@@ -401,7 +454,7 @@ button.link {
   display: flex;
   align-items: baseline;
   gap: var(--sp-3);
-  border: 1px solid var(--line);
+  border: 2px solid var(--line);
   border-radius: var(--r-md);
   padding: var(--sp-3);
   margin: var(--sp-2) 0;
@@ -414,20 +467,19 @@ button.link {
 .avatar {
   width: 48px;
   height: 48px;
-  border-radius: var(--r-md);
+  border-radius: var(--r-sm);
   object-fit: cover;
-  border: 1px solid rgba(255, 138, 199, 0.45);
-  box-shadow: var(--glow-soft);
+  border: 2px solid var(--accent);
   vertical-align: middle;
   margin-right: var(--sp-2);
 }
 .avatar.large { width: 96px; height: 96px; margin-right: 0; }
 .avatar-empty { display: inline-flex; align-items: center; justify-content: center; font-size: 11px; color: var(--muted); background: var(--panel-2); }
 .model-select { min-width: 260px; }
-.card-preview { border: 1px solid var(--line); border-radius: var(--r-md); padding: var(--sp-3); margin: var(--sp-3) 0; background: var(--panel-2); }
+.card-preview { border: 2px solid var(--line); border-radius: var(--r-md); padding: var(--sp-3); margin: var(--sp-3) 0; background: var(--panel-2); }
 .card-preview h3 { margin: 0 0 var(--sp-2); font-size: 13px; color: var(--muted); font-weight: 600; }
-.bar { height: 8px; background: var(--field); border: 1px solid var(--line); border-radius: 999px; overflow: hidden; }
-.fill { height: 100%; background: linear-gradient(90deg, var(--accent), var(--accent-2)); transition: width var(--dur) var(--ease); }
+.bar { height: 10px; background: var(--field); border: 2px solid var(--line); border-radius: 0; overflow: hidden; }
+.fill { height: 100%; background: var(--accent); transition: width var(--dur) var(--ease); }
 
 .preview-box {
   background: var(--field);
@@ -440,26 +492,38 @@ button.link {
 .qr-canvas { background: #fff; border-radius: var(--r-md); padding: var(--sp-2); margin: var(--sp-2) 0; }
 /* 会话列表：来源标签 + 最后消息 + 删除 */
 .conversations { align-items: stretch; }
-.conversation-item { display: flex; align-items: stretch; gap: var(--sp-1); border: 1px solid var(--line-control); border-radius: var(--r-md); overflow: hidden; background: var(--panel-2); transition: border-color var(--dur) var(--ease); }
-.conversation-item:hover { border-color: var(--accent); box-shadow: var(--glow-soft); }
+.conversation-item { display: flex; align-items: stretch; gap: var(--sp-1); border: 2px solid var(--line-control); border-radius: var(--r-sm); overflow: hidden; background: var(--panel-2); transition: border-color var(--dur) var(--ease), box-shadow var(--dur) var(--ease); }
+.conversation-item:hover { border-color: var(--accent); box-shadow: var(--shadow-hard-lime); }
 .conversation-item.active { border-color: var(--accent); }
+.conversation-item.active .conversation-name { font-weight: 800; }
 .conversation-main { display: grid; grid-template-columns: auto 1fr auto; grid-template-areas: "badge name time" "preview preview preview"; gap: 2px var(--sp-2); align-items: center; text-align: left; background: transparent; color: var(--text); border: none; border-radius: 0; padding: var(--sp-2) 10px; font-weight: 500; cursor: pointer; }
 .conversation-item.active .conversation-main { color: var(--accent); }
-.source-badge { grid-area: badge; font-size: 11px; line-height: 16px; padding: 0 6px; border-radius: 6px; border: 1px solid var(--line); color: var(--muted); white-space: nowrap; }
-.source-badge { border-radius: var(--r-pill); padding: 0 8px; }
-.source-badge.source-weixin { border-color: rgba(126, 240, 184, 0.4); color: var(--ok); background: rgba(126, 240, 184, 0.10); }
-.source-badge.source-web { border-color: rgba(127, 215, 255, 0.4); color: var(--accent-2); background: var(--accent-2-soft); }
+/* 来源徽章：白贴纸 + 左边一条 3px 的色条区分渠道 */
+.source-badge {
+  grid-area: badge;
+  font-size: 11px;
+  line-height: 18px;
+  padding: 0 7px;
+  border-radius: var(--r-sm);
+  border: 2px solid var(--ink);
+  background: var(--paper);
+  color: var(--ink);
+  font-weight: 700;
+  white-space: nowrap;
+}
+.source-badge.source-weixin { border-left: 6px solid var(--ok); }
+.source-badge.source-web { border-left: 6px solid var(--accent-2); }
 .conversation-name { grid-area: name; }
 .conversation-time { grid-area: time; font-size: 11px; color: var(--muted); font-weight: 400; }
 .conversation-preview { grid-area: preview; font-size: 12px; color: var(--muted); font-weight: 400; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 260px; }
-.conversation-delete { background: transparent; border: none; border-left: 1px solid var(--line); border-radius: 0; color: var(--muted); font-weight: 500; font-size: 12px; padding: 0 10px; cursor: pointer; min-height: 0; }
-.conversation-delete:hover:not(:disabled) { color: var(--danger); }
+.conversation-delete { background: transparent; border: none; border-left: 2px solid var(--line); border-radius: 0; color: var(--muted); font-weight: 700; font-size: 12px; padding: 0 10px; cursor: pointer; min-height: 0; box-shadow: none; }
+.conversation-delete:hover:not(:disabled) { color: var(--danger); background: var(--danger-bg); transform: none; box-shadow: none; }
 .conversation-delete:disabled { opacity: 0.5; cursor: default; }
 h2 .source-badge { margin-left: var(--sp-2); vertical-align: middle; }
 
 /* 对话提示词：默认那份可折叠；角色专属那份挂在角色的「编辑」里 */
 .prompt-default {
-  border: 1px solid var(--line);
+  border: 2px solid var(--line);
   border-radius: var(--r-md);
   background: var(--panel-2);
   padding: 0 var(--sp-4);
@@ -479,19 +543,19 @@ h2 .source-badge { margin-left: var(--sp-2); vertical-align: middle; }
   content: "";
   width: 0;
   height: 0;
-  border-left: 5px solid var(--muted);
-  border-top: 4px solid transparent;
-  border-bottom: 4px solid transparent;
+  border-left: 6px solid var(--accent);
+  border-top: 5px solid transparent;
+  border-bottom: 5px solid transparent;
   transition: transform var(--dur) var(--ease);
 }
 .prompt-default[open] > summary::before { transform: rotate(90deg); }
 .prompt-default[open] { padding-bottom: var(--sp-4); }
 .prompt-editor { margin-top: var(--sp-3); padding-top: var(--sp-3); border-top: 1px dashed var(--line); }
 
-/* 窄屏：留白收一点，触摸目标撑到 40px 以上 */
+/* 窄屏：留白收一点，触摸目标撑到 44px */
 @media (max-width: 760px) {
   .app { padding: var(--sp-4) var(--sp-3) 56px; }
-  .panel { padding: var(--sp-3) var(--sp-4); border-radius: var(--r-md); }
+  .panel { padding: var(--sp-3) var(--sp-4); }
   /* 窄屏是手指在点：目标撑到 44px（键盘/鼠标的桌面端保持紧凑） */
   nav { gap: 6px; }
   nav button, .ghost { min-height: 44px; }
