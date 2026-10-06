@@ -89,6 +89,17 @@ CI 当场红了 20 多条。
 不需要单独按用户名匹配），并把 `runner`、`root`、`ubuntu`、`vscode` 这类 CI/服务账号加进占位符名单。
 教训写在这里：**检查规则本身也要在 CI 环境里跑一遍**，本地绿不等于 CI 绿。
 
+第二个坑小一点但同样真实：邮箱规则重构时漏掉了 GitHub 的 noreply 例外，于是扫描器把**这份报告自己**里
+引用的示例路径与 noreply 地址也判成了个人信息（第二次 CI 红）。处理：报告里的示例路径改成
+`C:\Users\<用户名>\...` 这种占位写法，noreply 域名加回豁免。顺带说明：扫描器把自己的文档也一起扫，
+这点是对的 —— 报告里写真实路径，同样是泄露。
+
+## 3.5 CI 本身的更新
+
+三个 action 升到了仍在维护的大版本（`actions/checkout@v7`、`pnpm/action-setup@v6`、`actions/setup-node@v7`）——
+旧版跑在 Node 20 运行时上，GitHub 已开始提示弃用。pnpm 的版本仍然只由 `package.json` 的 `packageManager` 声明
+（两处都写会报 `ERR_PNPM_BAD_PM_VERSION`，这是这个仓库早期踩过的）。升级后 CI 依然全绿。
+
 ## 4. 给 AI 的安装指令
 
 新增 `INSTALL-WITH-AI.md`：一段可以直接整段复制给 AI 编码助手（Claude Code / Codex / Cursor / Gemini CLI / 任意 agent）的指令。
