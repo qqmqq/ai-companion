@@ -7,5 +7,5 @@
     "noEmit": true,
     "rootDir": "."
   },
-  "include": ["src/**/*.ts", "test/**/*.ts", "scripts/**/*.ts"]
+  "include": ["src/**/*.ts", "test/**/*.ts", "scripts/**/*.ts", "scripts/**/*.d.mts"]
 }
