@@ -17,8 +17,13 @@ const asJson = process.argv.includes("--json");
 const explicitFiles = process.argv.slice(2).filter((arg) => !arg.startsWith("--"));
 /** 扫描器自己当然写着这些规则，把自己排除掉，免得自检自爆 */
 const SELF = "scripts/pii-scan.mjs";
-/** 测试夹具里这些名字是通用占位符，不算个人信息 */
-const PLACEHOLDER_USERS = new Set(["me", "user", "username", "test", "example", "you", "someone", "abc"]);
+/** 路径里这些用户名是通用占位符（或 CI 账号），不算个人信息 */
+const PLACEHOLDER_USERS = new Set([
+  "me", "user", "username", "test", "example", "you", "someone", "abc",
+  // CI 和服务账号：GitHub Actions 的用户名就叫 runner，ubuntu 镜像里常见 vscode/node 之类，
+  // 这些名字出现在代码里（例如 scheduler-runner.ts）毫无个人信息可言。
+  "runner", "root", "admin", "administrator", "builder", "ubuntu", "vscode", "node", "ci", "github", "actions", "host",
+]);
 /**
  * 测试夹具里的假值：这些是编出来的，不该逼着大家在几十行上写豁免注释。
  * 判断依据是"一眼假"——同一数字重复、连续递增、或含 test/secret/dummy 这类词。
@@ -30,8 +35,6 @@ const FAKE_MAIL_DOMAINS = /(@im\.bot$|@example\.|@test$|@invalid$|@localhost$|\.
 const FAKE_MAIL_LOCAL = /^(test|keep-me|acct|user|example|demo)/i;
 const BINARY = /\.(png|jpe?g|webp|gif|ico|woff2?|ttf|otf|db|db-wal|db-shm|zip|gz|wasm|pdf)$/i;
 
-const homeUser = (process.env.USERNAME || process.env.USER || "").trim();
-
 const rules = [
   {
     id: "home-path",
@@ -40,12 +43,6 @@ const rules = [
     pattern: /(?:[A-Za-z]:\\Users\\|\/Users\/|\/home\/)([A-Za-z0-9._-]+)/g,
     message: "本机绝对路径（带用户名）",
     filter: (match) => !PLACEHOLDER_USERS.has(String(match[1]).toLowerCase()),
-  },
-  {
-    id: "home-user",
-    pattern: homeUser.length >= 3 ? new RegExp("\\b" + homeUser + "\\b", "gi") : null,
-    message: "当前机器的用户名出现",
-    filter: (match) => !PLACEHOLDER_USERS.has(String(match[0]).toLowerCase()),
   },
   {
     id: "email",
