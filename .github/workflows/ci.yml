@@ -15,13 +15,15 @@ jobs:
       # 第一次 CI 就是被"把 UTC+8 的渲染结果写死进断言"绊倒的。
       TZ: UTC
     steps:
-      - uses: actions/checkout@v4
+      # 这三个 action 都升到了仍在维护的大版本：用的是 Node 24 运行时，
+      # 旧的 v4 会触发「Node.js 20 is deprecated」的告警
+      - uses: actions/checkout@v7
 
-      # 版本不在这里写：package.json 的 packageManager 已经声明了 pnpm@10.0.0，
+      # pnpm 的版本不在这里写：package.json 的 packageManager 已经声明了 pnpm@10.0.0，
       # 两处都写会直接报 ERR_PNPM_BAD_PM_VERSION（第一次 CI 就是这么挂的）
-      - uses: pnpm/action-setup@v4
+      - uses: pnpm/action-setup@v6
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: 24
           cache: pnpm
