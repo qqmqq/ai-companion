@@ -31,7 +31,8 @@ const PLACEHOLDER_USERS = new Set([
 const FAKE_PHONES = new Set(["13800138000", "13900139000", "13333332977", "18888888888", "17777777777"]);
 const looksFakePhone = (value) => FAKE_PHONES.has(value) || new Set(value.slice(1)).size <= 2 || /^(\d)\1{6,}$/.test(value);
 const FAKE_SECRET_WORDS = /(secret|smoke|test|example|dummy|fake|placeholder|redact|sample|abcdef|xxxx|123456)/i;
-const FAKE_MAIL_DOMAINS = /(@im\.bot$|@example\.|@test$|@invalid$|@localhost$|\.local$)/i;
+// GitHub 的 noreply 地址是平台发的匿名身份，不是个人信息；im.bot 之类是测试夹具域名
+const FAKE_MAIL_DOMAINS = /(@im\.bot$|@example\.|@users\.noreply\.github\.com$|@test$|@invalid$|@localhost$|\.local$)/i;
 const FAKE_MAIL_LOCAL = /^(test|keep-me|acct|user|example|demo)/i;
 const BINARY = /\.(png|jpe?g|webp|gif|ico|woff2?|ttf|otf|db|db-wal|db-shm|zip|gz|wasm|pdf)$/i;
 

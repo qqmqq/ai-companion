@@ -9,7 +9,7 @@
 | 检查项 | 结果 |
 | --- | --- |
 | 本机绝对路径（`C:\Users\<名字>\`、`/Users/<名字>/`、`/home/<名字>/`） | 只有一处，且是测试夹具里的占位符 `C:\Users\me\secret.png`（文件名脱敏的用例），不是真路径 |
-| 提交者身份 | `qqmqq <qqmqq@users.noreply.github.com>` —— GitHub 的 noreply 地址，没有真实邮箱 |
+| 提交者身份 | GitHub 的 noreply 地址（`users.noreply.github.com`），没有真实邮箱 |
 | LICENSE 署名 | `Copyright (c) 2026 AI Companion contributors`，不是个人姓名 |
 | 邮箱 / 手机号 / 私钥 / 访问令牌（sk- / ghp_ / AIza / AKIA…） | 无真实值；命中的全是测试夹具（`sk-smoke-secret`、`13800138000` 这类一眼假的） |
 | `.env` / `backend/data/`（数据库、媒体、主密钥）/ `*.key` / `*.pem` / `*.db` | **历史上从未提交过**（`git log --diff-filter=A` 查过），且都已在 `.gitignore` 里 |
@@ -25,7 +25,7 @@
 
 | 输入 | 结果 |
 | --- | --- |
-| 造一个样本文件，里面放 `C:\Users\bai\私人\笔记.txt` + 手机号 + `sk-live-…` + 真实邮箱 | **报 5 处、退出码 1** |
+| 造一个样本文件，里面放 `C:\Users\<用户名>\私人\笔记.txt` + 手机号 + `sk-live-…` + 真实邮箱 | **报 4 类、退出码 1** |
 | 本仓库（`pnpm scan:pii`） | 通过、退出码 0 |
 
 **没做的一件事，明说**：改写历史。那 3 个旧提交的 diff 里仍然留着那个角色名。要彻底抹掉得重写历史并强推 —— 那会让 issue 里引用的 commit 号（`7ec480c`、`770b6bb` …）全部失效，属于破坏性操作，**等你点头再做**。
