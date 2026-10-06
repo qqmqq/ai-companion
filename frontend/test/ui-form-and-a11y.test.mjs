@@ -124,7 +124,7 @@ test("填上名字后：错误消失，提交按钮恢复可用", async () => {
 
   await act(async () => {
     const setter = Object.getOwnPropertyDescriptor(dom.window.HTMLInputElement.prototype, "value").set;
-    setter.call(nameInput, "小满");
+    setter.call(nameInput, "阿禾");
     nameInput.dispatchEvent(new dom.window.Event("input", { bubbles: true }));
   });
   assert.equal(container.querySelector(".field-error"), null, "填上名字后错误应该消失");

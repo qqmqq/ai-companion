@@ -41,5 +41,10 @@ jobs:
       - name: Architecture guards
         run: pnpm guard
 
+      # 公开仓库的底线检查：本机路径 / 邮箱 / 手机号 / 密钥 / 令牌 / 敏感文件都不许进版本库。
+      # 规则与豁免（测试夹具）写在 scripts/pii-scan.mjs 里。
+      - name: Personal-information scan
+        run: pnpm scan:pii
+
       - name: Build
         run: pnpm build

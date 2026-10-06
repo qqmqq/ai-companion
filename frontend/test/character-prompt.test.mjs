@@ -37,12 +37,12 @@ const { CharactersPage } = await import("../src/pages/characters.tsx");
 
 const CHARACTER = {
   id: "char-1",
-  name: "小满",
-  slug: "xiaoman",
+  name: "阿禾",
+  slug: "ahe",
   avatarMediaId: null,
   versionCount: 1,
   definition: {
-    name: "小满",
+    name: "阿禾",
     description: "住在隔壁的人",
     personality: "话多，爱笑",
     scenario: "老城区的出租屋",
@@ -170,12 +170,12 @@ test("默认对话提示词：挂载时读出来，改完保存有确认", async
 });
 
 test("角色专属提示词：读出来能改，保存后下一句起生效", async () => {
-  const state = installApi({ defaultPrompt: "默认：短句。", characterPrompt: "小满会叫我名字。" });
+  const state = installApi({ defaultPrompt: "默认：短句。", characterPrompt: "阿禾会叫我名字。" });
   const { root, errors } = await mount();
   const editor = await openCharacterEditor();
 
   const textarea = editor.querySelector("textarea");
-  assert.equal(textarea.value, "小满会叫我名字。", "挂载时要把这个角色自己那份读出来");
+  assert.equal(textarea.value, "阿禾会叫我名字。", "挂载时要把这个角色自己那份读出来");
 
   setValue(textarea, "叫我名字，别叫先生。");
   await settle(2);

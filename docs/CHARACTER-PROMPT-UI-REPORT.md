@@ -75,11 +75,11 @@
 | 类型 + 构建 | `pnpm build` | backend `tsc --noEmit` 通过；frontend `vite build` 93 模块，`dist/assets/index-*.css` 12.07 kB（gzip 3.33）、`index-*.js` 342.95 kB |
 | 架构守卫 | `pnpm guard` | 8/8 通过 |
 | 真机接口 | `node frontend/test/live-character-prompt.check.mjs` | 读 / 写 / 清空 / 回落全通过（真实后端 127.0.0.1:8787） |
-| 真实页面 | Edge headless + CDP，重载 `http://localhost:5173` | 标题 `AI Companion`；`link[rel=icon]` = `/favicon.svg` 且 HTTP 200；**控制台 0 条错误、0 条异常**；`nav [aria-current=page]` = 角色；`.prompt-editor` 存在，label「对话提示词（只对「小满」生效，改完下一句就生效）」、`maxLength=4000`、按钮「保存对话提示词 / 清空，改回用默认」；`--accent #7fb0ff`；`body` 背景 `rgb(14,16,20)`；样式表里存在 `:focus-visible` 与 `prefers-reduced-motion` 规则 |
+| 真实页面 | Edge headless + CDP，重载 `http://localhost:5173` | 标题 `AI Companion`；`link[rel=icon]` = `/favicon.svg` 且 HTTP 200；**控制台 0 条错误、0 条异常**；`nav [aria-current=page]` = 角色；`.prompt-editor` 存在，label「对话提示词（只对「那个角色」生效，改完下一句就生效）」、`maxLength=4000`、按钮「保存对话提示词 / 清空，改回用默认」；`--accent #7fb0ff`；`body` 背景 `rgb(14,16,20)`；样式表里存在 `:focus-visible` 与 `prefers-reduced-motion` 规则 |
 
 ## 6. 已知限制
 
-- 库里目前只有「小满」一个角色，且**全局与角色提示词都是空串**，所以「非空提示词真的改变了系统提示词」这条只有单测覆盖（`backend/test/unit/custom-prompt.test.ts`、`context-engine.test.ts` 里「角色优先于全局」那条），不是真机证据。
+- 库里目前只有一个角色（名字略去，见仓库公开说明），且**全局与角色提示词都是空串**，所以「非空提示词真的改变了系统提示词」这条只有单测覆盖（`backend/test/unit/custom-prompt.test.ts`、`context-engine.test.ts` 里「角色优先于全局」那条），不是真机证据。
 - 纯装饰分隔线仍用低对比的 `--line`（约 1.3:1）：暗色界面的常见取舍 —— 区块靠**表面层次**区分而不是靠描边，可操作的边界（悬停 / 焦点 / 弹窗）才提到 3:1 以上。
 - 窄屏按钮 40px 是 Web 口径；技能里「≥44pt」是原生 App 的规则，不适用这里。
 

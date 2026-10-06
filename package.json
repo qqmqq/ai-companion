@@ -9,7 +9,8 @@
     "typecheck": "pnpm -r typecheck",
     "test": "pnpm -r test",
     "build": "pnpm -r build",
-    "guard": "pnpm --filter @companion/backend guard"
+    "guard": "pnpm --filter @companion/backend guard",
+    "scan:pii": "node scripts/pii-scan.mjs"
   },
   "packageManager": "pnpm@10.0.0"
 }

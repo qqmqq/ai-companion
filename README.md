@@ -116,27 +116,45 @@ docs/            各阶段交付报告与故障复盘
 ### 前置条件
 
 - **Node.js ≥ 22.13**（推荐 24.x；本项目依赖原生 TypeScript 类型剥离与 `node:sqlite`）
-- **pnpm 10**（`corepack enable pnpm` 或 `npm i -g pnpm@10`）
+- **pnpm 10**（一键脚本会自己处理；手动则是 `corepack enable pnpm` 或 `npm i -g pnpm@10`）
 - 可选：一个 OpenAI 兼容服务或 Ollama（不配也能跑，内置占位模型保证链路可用）
 
-### 1. 克隆与安装
+### 一键安装（推荐）
+
+Windows：
+
+```powershell
+git clone https://github.com/qqmqq/ai-companion.git
+cd ai-companion
+powershell -ExecutionPolicy Bypass -File .\install.ps1
+```
+
+macOS / Linux / WSL：
+
+```bash
+git clone https://github.com/qqmqq/ai-companion.git
+cd ai-companion
+bash ./install.sh
+```
+
+脚本会：检查 Node 版本 → 装好 pnpm → 装依赖 → 按 `.env.example` 生成 `.env`（已存在则不动）→ 构建 → 告诉你怎么启动。
+它**不**会：装系统包、要管理员权限、覆盖你已有的配置、删任何文件。
+
+常用参数：`-Yes` / `--yes`（不提问，适合脚本或 AI 代跑）、`-Check` / `--check`（只检查环境）、`-NoBuild` / `--no-build`（跳过构建）、`-Dir` / `--dir`（先克隆到指定目录）、`-Start` / `--start`（装完直接启动）。
+
+### 或者：把这段丢给你的 AI
+
+**👉 [INSTALL-WITH-AI.md](INSTALL-WITH-AI.md)** 里有一段可以直接复制给 AI 编码助手（Claude Code / Codex / Cursor / Gemini CLI 等）的安装指令：
+它会检查环境 → 克隆 → 跑一键脚本 → 自检 → 启动，并把每一步结果回给你；同时明确禁止改源码、用管理员权限或动你已有的数据。
+
+### 手动安装
 
 ```bash
 git clone https://github.com/qqmqq/ai-companion.git
 cd ai-companion
 pnpm install
-```
-
-### 2. 配置（可选）
-
-```bash
-cp .env.example .env    # 默认配置即可直接跑，端口 8787
-```
-
-### 3. 启动
-
-```bash
-pnpm dev               # 同时启动后端(8787) 与前端(5173)
+cp .env.example .env    # 可选：默认配置即可直接跑，端口 8787
+pnpm dev                # 同时启动后端(8787) 与前端(5173)
 ```
 
 打开 **http://127.0.0.1:5173**，然后：
@@ -154,6 +172,7 @@ pnpm dev               # 同时启动后端(8787) 与前端(5173)
 pnpm typecheck     # 全量类型检查
 pnpm test          # 后端 469 例 + 前端 75 例（单元 / 集成 / 架构守卫）
 pnpm guard         # 只跑 8 条架构硬守卫
+pnpm scan:pii      # 个人信息扫描：本机路径 / 邮箱 / 手机号 / 密钥 / 令牌
 pnpm build         # 后端类型检查 + 前端产物构建
 pnpm --filter @companion/backend smoke   # 冒烟：聊天 / 记忆 / 上下文
 ```
@@ -168,10 +187,20 @@ pnpm --filter @companion/backend smoke   # 冒烟：聊天 / 记忆 / 上下文
 
 1. **先开 Issue 说清要解决什么**，避免大改动方向不一致；
 2. Fork → 建分支（`feat/xxx` / `fix/xxx`）→ 改动请**带上能复现问题的测试**（后端 `backend/test/`，前端 `frontend/test/`）；
-3. 提交前必须过四道门：`pnpm typecheck`、`pnpm test`、`pnpm build`、`pnpm guard`；
+3. 提交前必须过五道门：`pnpm typecheck`、`pnpm test`、`pnpm build`、`pnpm guard`、`pnpm scan:pii`；
 4. **不要绕过架构守卫**（ARCH-1…8）：它们不是风格偏好，而是这个项目的存在理由；
 5. 提交信息用 [Conventional Commits](https://www.conventionalcommits.org/)（`feat:` `fix:` `docs:` `refactor:` `test:` `chore:`）；
-6. **绝不要提交** `.env`、`backend/data/`（含数据库、媒体与主密钥）或任何真实凭据/聊天记录 —— 这些已在 `.gitignore` 中。
+6. **绝不要提交** `.env`、`backend/data/`（含数据库、媒体与主密钥）或任何真实凭据/聊天记录 —— 这些已在 `.gitignore` 中，`pnpm scan:pii` 与 CI 会再拦一道。
+
+---
+
+## 🔒 Privacy · 隐私
+
+- **数据只在本机**：SQLite 数据库、媒体文件与加密主密钥都在 `backend/data/`（已被 `.gitignore` 排除），不上传、不外发；
+- 默认只监听 `127.0.0.1:8787`，同局域网的机器也访问不到（要对外开就自己改 `COMPANION_HOST`，并想清楚后果）；
+- 模型/渠道凭据以 AES 加密存本机，主密钥单独存放，日志统一脱敏；
+- 本仓库**不含任何个人信息**：`scripts/pii-scan.mjs` 会扫描版本库里的本机路径、邮箱、手机号、私钥、访问令牌和敏感文件，CI 每次提交都跑；
+- QQ / 微信渠道是可选的：不配置就完全不启用，系统照常运行。
 
 ---
 

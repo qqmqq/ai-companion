@@ -12,7 +12,7 @@ test("角色对话提示词：能读能写、去首尾空白、空串等于取�
     const created = await fetch(server.baseUrl + "/api/characters", {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ name: "小满" }),
+      body: JSON.stringify({ name: "阿禾" }),
     });
     assert.equal(created.status, 201);
     const character = (await created.json()) as { id: string };
